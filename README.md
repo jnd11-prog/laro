@@ -52,6 +52,21 @@ Requires Node.js 22.13+ and the lockfile's package manager.
 
 The database bindings are declared in `.openai/hosting.json`. Deployments apply the committed Drizzle migrations. No LLM API key or external paid service is needed.
 
+## Deploy a public copy to Cloudflare
+
+The app runs anonymously without the managed host's sign-in (visitors get an opaque device cookie), so it can be deployed to any Cloudflare account. Requires Node.js 22.13+.
+
+```sh
+pnpm install --frozen-lockfile
+npx wrangler login
+npx wrangler d1 create laro              # copy the database_id it prints
+npx wrangler r2 bucket create laro-audio
+pnpm build
+LARO_D1_ID=<database_id> LARO_R2_BUCKET=laro-audio LARO_APPLY_SCHEMA=1 node scripts/deploy-cloudflare.mjs
+```
+
+Later deploys: `pnpm build && LARO_D1_ID=<database_id> node scripts/deploy-cloudflare.mjs` (omit `LARO_APPLY_SCHEMA`). Wrangler prints the public `*.workers.dev` URL at the end. The managed host's "sign in with ChatGPT" route is not available on a self-hosted copy; everything else works anonymously.
+
 ## Checks
 
 ```sh
