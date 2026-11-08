@@ -107,7 +107,7 @@ Review intervals are deliberately transparent: a missed-then-correct phrase retu
 
 ## Saved-career compatibility
 
-Older JSON careers begin the full builder with a deterministic seed. Existing XP, kits, lessons, trophy collections, and history remain intact; no destructive database migration is needed. Attributes and overall rating display as unknown until the corresponding builder questions are resolved. Pending older recall exercises are upgraded to Tagalog cues while preserving their attempt count.
+Careers replay from recorded answers, so the questions are versioned (`CAREER_RULES` in `lib/engine.ts`). A career saved under older questions restarts its builder on the next load. Existing XP, kits, lessons, trophy collections, and history remain intact; no destructive database migration is needed. Attributes and overall rating display as unknown until the corresponding builder questions are resolved. Pending older recall exercises are upgraded to Tagalog cues while preserving their attempt count.
 
 ## Next development steps
 

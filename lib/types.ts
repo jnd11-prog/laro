@@ -8,7 +8,7 @@ export type Challenge = { id: string; phraseId: string; mode: 'meaning' | 'recal
 export type Career = {
   season: number; day: number; spins: number; xp: number; goals: number; assists: number; matches: number; wins: number; draws: number;
   rating: number; club: string; division: number; pace: number; shooting: number; passing: number; dribbling: number; stamina: number; defending: number; trophies: Record<string, number>; strength:number; kit: string;
-  builder?:{seed:number;choices:CareerChoice[];complete:boolean}; profile?:SimProfile;
+  builder?:{seed:number;choices:CareerChoice[];complete:boolean;rules?:number}; profile?:SimProfile;
   history: CareerEvent[]; reviews: Record<string, Review>; pending: Challenge | null; lastKind: EventKind | null;
 };
 export type Snapshot = { state: Career; version: number; phrases: Phrase[]; role: string; signedIn: boolean; invite?: string };

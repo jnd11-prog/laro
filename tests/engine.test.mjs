@@ -12,7 +12,7 @@ function answerFor(q){const p=CATALOG.find(p=>p.id===q.phraseId);return q.mode==
 
 test('attachment questions begin with position, nationality, debut age, and height',()=>{
  const choices=[],prompts=[];for(let i=0;i<4;i++){const frame=inspectCareer(42,choices);prompts.push(frame.question.prompt);choices.push(advanceCareer(42,choices,()=>.6).record);}
- assert.deepEqual(prompts,['What position?','Nationality','What age do you make your pro debut?','Height?']);
+ assert.deepEqual(prompts,["What position?","What's your nationality?",'What age do you make your pro debut?','How tall are you?']);
 });
 test('first three career questions resolve; fourth pauses for Tagalog',()=>{
  const s=conversation();assert.equal(s.builder.choices.length,3);assert.equal(s.pending.phraseId,'galing');assert.equal(s.pending.revision,2);assert.equal(s.history.length,4);
@@ -110,3 +110,38 @@ test('wrong options never repeat each other or duplicate the correct answer',()=
 test('a new career cannot start until the current one and its quiz are finished',()=>{
  assert.throws(()=>nextSeason(initialCareer(42)),/Finish this career/);
 });
+function simulate(seed){let n=seed*2654435761>>>0;const rng=()=>(n=(n*1664525+1013904223)>>>0)/4294967296;const choices=[],prompts=[];let f=inspectCareer(seed,choices);while(!f.complete){prompts.push(f.question);choices.push(advanceCareer(seed,choices,rng).record);f=inspectCareer(seed,choices);}return {profile:f.profile,prompts};}
+const careers=Array.from({length:400},(_,i)=>simulate(i+1));
+test('careers end at believable ages and heights',()=>{
+ for(const {profile:p} of careers){assert.ok(p.retirementAge<=(p.position==='GK'?44:41),`${p.position} retires at ${p.retirementAge}`);assert.ok(p.seasons>=10);}
+});
+test('career totals stay in range for each position',()=>{
+ const maxGoals={GK:13,CB:188,RB:157,LB:157,CDM:188,CM:375,CAM:625,RM:625,LM:625,RW:1000,LW:1000,ST:1125};
+ for(const {profile:p} of careers){assert.ok(p.goals<=maxGoals[p.position],`${p.position} scored ${p.goals}`);if(p.overall<70)assert.ok(p.toty<=1,`overall ${p.overall} with ${p.toty} TOTY`);}
+});
+test('club rules match the real game',()=>{
+ for(const {profile:p} of careers)for(const c of p.clubs){
+  if(c.name==='Athletic Club')assert.ok(['Spain','France'].includes(p.nationality),p.nationality);
+  if(c.cont)assert.ok(!(c.euroWon||[]).some(t=>['UCL','UEL','UECL'].includes(t)),`${c.name} won ${c.euroWon}`);
+  assert.ok(c.lt<=13);
+ }
+});
+test('tournaments follow the real calendar and skip rounds that do not exist',()=>{
+ for(const {profile:p,prompts} of careers){
+  for(const t of p.intl||[]){
+   assert.ok(t.year>=2027);
+   if(t.name==='World Cup')assert.equal((t.year-2030)%4,0);
+   if(t.name==='Euro'||t.name==='Copa América')assert.equal((t.year-2028)%4,0);
+   if(t.name==='Asian Cup')assert.equal((t.year-2027)%4,0);
+   if(t.name==='Gold Cup')assert.equal(t.year%2,1);
+  }
+  for(const q of prompts.filter(q=>/^(Copa América|Gold Cup) /.test(q.prompt)))assert.ok(!q.options.some(o=>o.label==='Round of 16'),q.prompt);
+  for(const q of prompts.filter(q=>/^Copa América /.test(q.prompt)))assert.ok(q.options.find(o=>o.label==='Did not qualify').blocked,q.prompt);
+ }
+});
+test('a career saved under older questions restarts but keeps earned progress',()=>{
+ const old=initialCareer(42);old.xp=500;old.kit='gold';old.trophies={league:3};old.reviews={galing:{seen:1,correct:1,streak:1,due:0,last:0}};old.builder={seed:42,choices:[{id:'position',index:99,type:'spin'}],complete:true};old.goals=800;
+ const next=upgradeCareer(old);assert.equal(next.builder.rules,2);assert.equal(next.builder.choices.length,0);assert.equal(next.builder.complete,false);assert.equal(next.goals,0);
+ assert.equal(next.xp,500);assert.equal(next.kit,'gold');assert.deepEqual(next.trophies,{league:3});assert.deepEqual(next.reviews,old.reviews);
+});
+

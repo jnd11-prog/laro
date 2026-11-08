@@ -1,5 +1,7 @@
 import {inspectCareer,advanceCareer,type SimProfile} from './player-career.js';
 import type { Career, CareerEvent, EventKind, Phrase, Review, SpinQuestion,Challenge } from './types';
+// Bump when career questions change: saved careers replay by question and option position.
+export const CAREER_RULES=2;
 export const EVENT_KINDS: EventKind[] = ['goal','training','match','transfer','message','rest','award'];
 export const COLORS=['#c7f56b','#76c7ff','#c3a6f6','#ffda83','#ff9dbb','#83dfc6','#ffad74','#a2b5ff'];
 export const AWARDS=[
@@ -9,11 +11,14 @@ export const AWARDS=[
  {id:'boot',label:'GOLDEN BOOT',name:'Golden Boots'},{id:'toty',label:'TOTY',name:'Team of the Year'},{id:'pots',label:'POTS',name:'Player of the Season'},
 ];
 export function initialCareer(seed=Math.floor(Math.random()*4294967296)):Career{
- return {season:1,day:1,spins:0,xp:0,goals:0,assists:0,matches:0,wins:0,draws:0,rating:0,club:'Not signed',division:3,pace:0,shooting:0,passing:0,dribbling:0,stamina:0,defending:0,strength:0,trophies:{},kit:'lime',history:[],reviews:{},pending:null,lastKind:null,builder:{seed,choices:[],complete:false},profile:inspectCareer(seed,[]).profile};
+ return {season:1,day:1,spins:0,xp:0,goals:0,assists:0,matches:0,wins:0,draws:0,rating:0,club:'Not signed',division:3,pace:0,shooting:0,passing:0,dribbling:0,stamina:0,defending:0,strength:0,trophies:{},kit:'lime',history:[],reviews:{},pending:null,lastKind:null,builder:{seed,choices:[],complete:false,rules:CAREER_RULES},profile:inspectCareer(seed,[]).profile};
 }
 export function upgradeCareer(input:Career):Career{
- const builder=input.builder||{seed:Math.imul(input.season||1,2654435761)>>>0,choices:[],complete:false};
+ const stale=!!input.builder&&input.builder.rules!==CAREER_RULES;
+ const builder=input.builder&&!stale?input.builder:{seed:input.builder?.seed??Math.imul(input.season||1,2654435761)>>>0,choices:[],complete:false,rules:CAREER_RULES};
  const frame=inspectCareer(builder.seed,builder.choices);
+ // A career built under older questions cannot replay, so it restarts; XP, kits, lessons, trophies and history stay.
+ if(stale)input={...input,club:'Not signed',goals:0,assists:0,pace:0,shooting:0,passing:0,dribbling:0,defending:0,strength:0};
  return {...input,dribbling:input.dribbling??61,stamina:input.stamina??64,defending:input.defending??35,strength:input.strength??input.stamina??64,rating:frame.profile.stats.every(stat=>stat.value!==null)?frame.profile.overall:0,trophies:input.trophies??{},builder:{...builder,complete:frame.complete},profile:frame.profile};
 }
 export function isCareerComplete(s:Career){return !!s.builder?.complete;}
@@ -26,7 +31,7 @@ export function choosePhrase(phrases:Phrase[],state:Career,now:number,rng=Math.r
  for(let i=0;i<phrases.length;i++){r-=weights[i];if(r<0)return phrases[i];}return phrases[phrases.length-1];
 }
 export function getSpinQuestion(state:Career,phrases:Phrase[],now=Date.now()):SpinQuestion{
- const s=state.builder?state:upgradeCareer(state),b=s.builder!;
+ const s=state.builder?.rules===CAREER_RULES?state:upgradeCareer(state),b=s.builder!;
  const frame=inspectCareer(b.seed,b.choices);
  if(frame.complete)return {id:'complete',prompt:'Career complete',options:[],presentation:'complete',step:b.choices.length,remaining:0};
  if((s.spins+1)%4===0){
