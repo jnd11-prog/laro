@@ -89,3 +89,24 @@ test('legacy career metadata and trophies survive the builder upgrade',()=>{
  const old=initialCareer(42);old.xp=177;old.kit='blue';old.rating=62;old.trophies={ucl:2};delete old.builder;delete old.profile;
  const next=upgradeCareer(old);assert.equal(next.xp,177);assert.equal(next.kit,'blue');assert.equal(next.trophies.ucl,2);assert.equal(next.builder.choices.length,0);assert.equal(next.rating,0);assert.equal(old.builder,undefined);
 });
+test('a one-word phrase is never a word-order exercise that shows its own answer',()=>{
+ const word={id:'salamat-solo',phrase:'Salamat.',meaning:'Thanks.',context:'Test.',category:'Family'};
+ const q=makeChallenge(word,{seen:3,correct:3,streak:3,due:0,last:0},'solo',[word,...CATALOG],()=>.5);
+ assert.equal(q.mode,'recall');assert.equal(q.cue,'_____');assert.ok(q.options.includes('Salamat'));
+});
+test('wrong options never repeat each other or duplicate the correct answer',()=>{
+ const twin={id:'twin',phrase:'Magaling ka!',meaning:p.meaning,context:'Test.',category:'Matchday'};
+ const repeat={id:'repeat',phrase:'Ang husay mo!',meaning:'Great job.',context:'Test.',category:'Matchday'};
+ const again={id:'again',phrase:'Husay!',meaning:'great job',context:'Test.',category:'Matchday'};
+ const pool=[p,twin,repeat,again];
+ for(let i=0;i<40;i++){
+  const rng=(()=>{let n=i;return()=>(n=(n*73+11)%101)/101;})();
+  const q=makeChallenge(p,undefined,`meaning-${i}`,pool,rng);
+  const seen=q.options.map(o=>o.toLowerCase().replace(/[.,!?]/g,'').trim());
+  assert.equal(new Set(seen).size,seen.length,q.options.join(' | '));
+  assert.equal(q.options.filter(o=>o===p.meaning).length,1);
+ }
+});
+test('a new career cannot start until the current one and its quiz are finished',()=>{
+ assert.throws(()=>nextSeason(initialCareer(42)),/Finish this career/);
+});

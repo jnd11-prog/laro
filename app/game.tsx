@@ -44,11 +44,12 @@ export default function Game(){
   useEffect(()=>{
     let cancelled=false;
     (async()=>{try{await load();const invite=new URLSearchParams(location.search).get('join');if(invite){const r=await fetch('/api/join',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({invite})});const data=await r.json() as {error?:string};if(!r.ok)throw new Error(data.error);await load();history.replaceState(null,'','/');notify('Career connected.');}}catch(e){if(!cancelled)setError((e as Error).message);}})();
-    const saved=localStorage.getItem('laro-prefs-v2');if(saved){try{const p=JSON.parse(saved);setSpeed(p.speed||1);setSound(p.sound!==false);}catch{}}
-    setReduced(matchMedia('(prefers-reduced-motion: reduce)').matches);
+    let storedReduced:unknown;try{const saved=localStorage.getItem('laro-prefs-v2');if(saved){const p=JSON.parse(saved);setSpeed(p.speed||1);setSound(p.sound!==false);storedReduced=p.reduced;}}catch{/* Preferences are optional when storage is blocked. */}
+    setReduced(typeof storedReduced==='boolean'?storedReduced:matchMedia('(prefers-reduced-motion: reduce)').matches);
     return()=>{cancelled=true;audioRef.current?.pause();window.speechSynthesis?.cancel();};
   },[load,notify]);
-  useEffect(()=>{localStorage.setItem('laro-prefs-v2',JSON.stringify({speed,sound}));},[speed,sound]);
+  // Reduced motion is stored only as an override, so a later OS setting change still applies.
+  useEffect(()=>{try{localStorage.setItem('laro-prefs-v2',JSON.stringify({speed,sound,reduced:reduced===matchMedia('(prefers-reduced-motion: reduce)').matches?undefined:reduced}));}catch{/* Preferences are optional when storage is blocked. */}},[speed,sound,reduced]);
   useEffect(()=>{arcade.setEnabled(sound);},[sound]);
   useEffect(()=>()=>arcade.stopSpin(),[]);
   useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),4500);return()=>clearTimeout(t);},[notice]);
@@ -106,7 +107,7 @@ export default function Game(){
   return <div className={`app-shell ${view==='career'?'play-mode':''}`}>
     {!lessonOpen&&<div className="workspace">
       <header className="topbar"><div className="breadcrumb"><span>CHRIS’S CAREER</span><ChevronRight size={13}/><b>{view==='career'?`RUN ${pad(state.season)}`:view==='phrasebook'?'PHRASEBOOK':view==='locker'?'LOCKER ROOM':'THE STUDIO'}</b></div><div className="top-actions"><span className="save-status"><i/>{snap?'SAVED':'CONNECTING'}</span><div className="xp-counter"><Zap size={15} fill="currentColor"/>{state.xp.toLocaleString()}<span>XP</span></div><button className="icon-button" title={sound?'Mute game sounds':'Enable game sounds'} aria-label={sound?'Mute game sounds':'Enable game sounds'} onClick={()=>{arcade.unlock();setSound(!sound);}}>{sound?<Volume2 size={18}/>:<VolumeX size={18}/>}</button><button className="icon-button" aria-label="Game settings" onClick={()=>setSettings(true)}><Settings2 size={18}/></button><div className="user-avatar">C<span/></div></div></header>
-      <nav className="quick-nav" aria-label="Game navigation"><button className={view==='career'?'active':''} onClick={()=>changeView('career')}>CAREER</button><button className={view==='phrasebook'?'active':''} onClick={()=>changeView('phrasebook')}>TAGALOG</button><button className={view==='locker'?'active':''} onClick={()=>changeView('locker')}>KITS</button>{(!snap||snap.role==='owner')&&<button className={view==='studio'?'active':''} onClick={()=>changeView('studio')}>STUDIO</button>}<button onClick={()=>setHelp(true)} aria-label="How to play">?</button></nav>
+      <nav className="quick-nav" aria-label="Game navigation"><button className={view==='career'?'active':''} onClick={()=>changeView('career')}>CAREER</button><button className={view==='phrasebook'?'active':''} onClick={()=>changeView('phrasebook')}>TAGALOG</button><button className={view==='locker'?'active':''} onClick={()=>changeView('locker')}>KITS</button>{snap?.role==='owner'&&<button className={view==='studio'?'active':''} onClick={()=>changeView('studio')}>STUDIO</button>}<button onClick={()=>setHelp(true)} aria-label="How to play">?</button></nav>
       <main>
         {error&&<div className="error-banner" role="alert"><span>{error}</span>{!snap&&<button onClick={()=>load().then(()=>setError('')).catch(e=>setError(e.message))}>Retry</button>}<button aria-label="Dismiss error" onClick={()=>setError('')}><X size={16}/></button></div>}
         {view==='career'&&<>
@@ -169,5 +170,5 @@ function questionGroup(id:string){if(/^intl/.test(id))return 'INTERNATIONAL';if(
 function Counter({target,animate,duration}:{target:number;animate:boolean;duration:number}){
  const [value,setValue]=useState(0);
  useEffect(()=>{let frame=0,start=0;if(!target){setValue(0);return;}function draw(t:number){if(!start)start=t;const progress=animate?Math.min(1,(t-start)/duration):1;setValue(Math.round(target*(1-Math.pow(1-progress,3))));if(progress<1)frame=requestAnimationFrame(draw);}frame=requestAnimationFrame(draw);return()=>cancelAnimationFrame(frame);},[target,animate,duration]);
- return <div className="counter-stage"><span className="eyebrow">CAREER TOTAL</span><strong className="pixel">{value.toLocaleString()}</strong><span>{animate?'ROLLING…':'READY TO ROLL'}</span></div>;
+ return <div className="counter-stage"><span className="eyebrow">CAREER TOTAL</span><strong className="pixel">{value.toLocaleString()}</strong><span>{animate?'ROLLING…':target?'FINAL TOTAL':'READY TO ROLL'}</span></div>;
 }

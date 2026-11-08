@@ -39,17 +39,20 @@ export function getSpinQuestion(state:Career,phrases:Phrase[],now=Date.now()):Sp
  }
  return frame.question!;
 }
+// Wrong options, with no repeats and nothing a grader would accept as the answer.
+function distinctFrom(answer:string,items:string[]){const seen=new Set([normalize(answer)]);return items.filter(v=>{const k=normalize(v);if(seen.has(k))return false;seen.add(k);return true;});}
 export function makeChallenge(p:Phrase,review:Review|undefined,id:string,phrases:Phrase[],rng=Math.random):Challenge{
- const mode=!review?'meaning':review.streak>=2?'build':'recall';
  const words=p.phrase.replace(/[.!?]/g,'').split(/\s+/);
+ // A one-word phrase has nothing to put in order, and its cue would show the answer.
+ const mode=!review?'meaning':review.streak>=2&&words.length>1?'build':'recall';
  if(mode==='recall'){
   const missingIndex=words.length>1?words.length-1:0,target=words[missingIndex];
-  const others=Array.from(new Set(phrases.filter(q=>q.id!==p.id).flatMap(q=>q.phrase.replace(/[.,!?]/g,'').split(/\s+/)).filter(w=>normalize(w)!==normalize(target))));
+  const others=distinctFrom(target,phrases.filter(q=>q.id!==p.id).flatMap(q=>q.phrase.replace(/[.,!?]/g,'').split(/\s+/)));
   const options=shuffle([target,...shuffle(others,rng).slice(0,2)],rng);
   return {id,phraseId:p.id,mode,revision:2,cue:words.map((w,i)=>i===missingIndex?'_____':w).join(' '),missingIndex,options,prompt:'Complete the phrase.',first:false,tries:0,solved:false};
  }
  if(mode==='build')return {id,phraseId:p.id,mode,revision:2,cue:words[0]+' '+words.slice(1).map(()=>'_____').join(' '),options:shuffle(words,rng),prompt:'Put the words in order.',first:false,tries:0,solved:false};
- return {id,phraseId:p.id,mode,revision:2,cue:p.phrase,options:shuffle([p.meaning,...shuffle(phrases.filter(q=>q.id!==p.id),rng).slice(0,2).map(q=>q.meaning)],rng),prompt:'Choose the meaning.',first:true,tries:0,solved:false};
+ return {id,phraseId:p.id,mode,revision:2,cue:p.phrase,options:shuffle([p.meaning,...shuffle(distinctFrom(p.meaning,phrases.filter(q=>q.id!==p.id).map(q=>q.meaning)),rng).slice(0,2)],rng),prompt:'Choose the meaning.',first:true,tries:0,solved:false};
 }
 export function upgradePending(s:Career,phrases:Phrase[]):Career{
  if(!s.pending||s.pending.solved||s.pending.revision===2)return s;
