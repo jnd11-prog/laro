@@ -2,6 +2,8 @@
 
 A full-stack Tagalog learning app built around a soccer career simulator. Made for Chris, a Korean American learner from NY/NJ, by his Filipina partner Shelomi.
 
+**Play it:** [laro-fc.jnd11.workers.dev](https://laro-fc.jnd11.workers.dev). No sign-up needed; each browser gets its own guest career.
+
 ![The Laro FC career wheel on its first question, “What position?”](docs/career-wheel.png)
 
 Each round follows the full career builder: position, nationality, debut age, height, career length, attributes, dominant foot, clubs, upgrades, domestic and European competitions, international results, goals, assists, and individual awards. Conditional follow-up questions reflect earlier results. The wheel shows the possible answers and the backend applies the selected result; numeric goal and assist totals use an animated counter. The run ends with a career card rather than an arbitrary spin limit.
