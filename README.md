@@ -2,7 +2,9 @@
 
 A full-stack Tagalog learning app built around a soccer career simulator. Made for Chris, a Korean American learner from NY/NJ, by his Filipina partner Shelomi.
 
-Each round follows the full career builder supplied by the user: position, nationality, debut age, height, career length, attributes, dominant foot, clubs, upgrades, domestic and European competitions, international results, goals, assists, and individual awards. Conditional follow-up questions reflect earlier results. The wheel shows the possible answers and the backend applies the selected result; numeric goal and assist totals use an animated counter. The run ends with a career card rather than an arbitrary spin limit.
+![The Laro FC career wheel on its first question, “What position?”](docs/career-wheel.png)
+
+Each round follows the full career builder: position, nationality, debut age, height, career length, attributes, dominant foot, clubs, upgrades, domestic and European competitions, international results, goals, assists, and individual awards. Conditional follow-up questions reflect earlier results. The wheel shows the possible answers and the backend applies the selected result; numeric goal and assist totals use an animated counter. The run ends with a career card rather than an arbitrary spin limit.
 
 Every fourth spin pauses for Tagalog. New phrases start with meaning recognition, successful reviews introduce missing-word recall in Tagalog, and repeated correct reviews unlock word ordering. Checkpoint wheels show categories rather than full phrases. The quiz removes the career screen, wheel, and recent history from the rendered page, and hides the English gloss and usage explanation until the answer is correct, including after mistakes. The phrasebook remains available for studying.
 
@@ -20,7 +22,7 @@ Every fourth spin pauses for Tagalog. New phrases start with meaning recognition
 
 ## Architecture
 
-React + TypeScript run on the Vinext app router. API routes execute on Cloudflare Workers. Cloudflare D1 stores careers, clubs, memberships, custom phrases, and mutation records. R2 holds audio objects. Sites supplies hosted authentication. Signed-in visitors use their stable site-specific user ID; anonymous visitors use an opaque HttpOnly device cookie.
+React + TypeScript run on the Vinext app router. API routes execute on Cloudflare Workers. Cloudflare D1 stores careers, clubs, memberships, custom phrases, and mutation records. R2 holds audio objects. On the managed host, sign-in comes from that host and signed-in visitors use their stable site-specific user ID. Anonymous visitors, and every visitor on a self-hosted copy, use an opaque HttpOnly device cookie.
 
 ```mermaid
 flowchart TD
@@ -32,9 +34,20 @@ flowchart TD
 
 Career mutations compare the expected version with the stored version. A D1 batch atomically updates the career and inserts an idempotency record only when the update succeeds. Stale clients receive a conflict response and reload. Replayed request IDs return the saved result without awarding additional XP. Answer correctness and kit eligibility are validated on the server.
 
-`lib/player-career.js` adapts the question families and probability rules from the user's supplied “The Wheel — Build a Footballer” HTML. Each request reconstructs its own simulation from a career seed and recorded choices. Replay validates stage IDs and available outcomes, and there is no mutable simulation state shared between careers. The TypeScript declaration exposes a typed boundary to the API and UI. Each event records the exact question, weights, and selected index for animation.
+`lib/player-career.js` adapts the question families and probability rules from a single-file HTML game, “The Wheel — Build a Footballer”. Each request reconstructs its own simulation from a career seed and recorded choices. Replay validates stage IDs and available outcomes, and there is no mutable simulation state shared between careers. The TypeScript declaration exposes a typed boundary to the API and UI. Each event records the exact question, weights, and selected index for animation.
 
 An invite grants learner membership in the selected career, not creator permissions. Audio requests must belong to the requester's current club. Site-level sharing is a separate access boundary: the initial deployment is owner-private, so Chris needs site access before an in-app invite works.
+
+### Where to look
+
+| Path | What it does |
+| --- | --- |
+| `lib/engine.ts` | Grades exercises, schedules review, awards XP, and connects the career simulator to the game. |
+| `lib/player-career.js` | Replays the seeded career builder and its branching questions. |
+| `lib/server.ts`, `app/api/[...route]/route.ts` | Identity, membership, atomic saves, and the HTTP API. |
+| `app/game.tsx`, `app/art.tsx` | The game UI, quiz, phrasebook, studio, pixel art, and weighted wheel. |
+
+`components/ui/`, `vendor/`, and most of `scripts/` are framework and hosting scaffolding.
 
 ## Local development
 
@@ -48,7 +61,7 @@ Requires Node.js 22.13+ and the lockfile's package manager.
    node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_sticky_vengeance.sql
    ```
 
-4. Run `pnpm dev`. Portable previews normally use http://localhost:5173. Managed previews use the Sites preview service.
+4. Run `pnpm dev` and open http://localhost:5173.
 
 The database bindings are declared in `.openai/hosting.json`. Deployments apply the committed Drizzle migrations. No LLM API key or external paid service is needed.
 
@@ -65,25 +78,24 @@ pnpm build
 LARO_D1_ID=<database_id> LARO_R2_BUCKET=laro-audio LARO_APPLY_SCHEMA=1 node scripts/deploy-cloudflare.mjs
 ```
 
-Later deploys: `pnpm build && LARO_D1_ID=<database_id> node scripts/deploy-cloudflare.mjs` (omit `LARO_APPLY_SCHEMA`). Wrangler prints the public `*.workers.dev` URL at the end. The managed host's "sign in with ChatGPT" route is not available on a self-hosted copy; everything else works anonymously.
+Later deploys: `pnpm build && LARO_D1_ID=<database_id> node scripts/deploy-cloudflare.mjs` (omit `LARO_APPLY_SCHEMA`). Wrangler prints the public `*.workers.dev` URL at the end. Add `LARO_DRY_RUN=1` to bundle and validate without changing your Cloudflare account.
+
+The managed host's "sign in with ChatGPT" route is not available on a self-hosted copy; everything else works anonymously. The deploy script sets `LARO_DISABLE_HOST_AUTH=1` so the Worker ignores the host's identity header, which anyone could forge without that host in front of it.
 
 ## Checks
 
 ```sh
-node node_modules/typescript/bin/tsc --noEmit
-node --experimental-strip-types --test tests/engine.test.mjs
-python tests/storage.test.py
+pnpm typecheck
+pnpm test
 ```
 
-The domain suite checks quiz answer visibility, wrong-answer scoring, review scheduling, weighted wheel geometry, deterministic replay, request isolation, and complete career runs across thirty seeds. The SQLite suite verifies the real schema, atomic reward updates, request replay, and membership constraints.
+The domain suite checks quiz answer visibility, wrong-answer scoring, review scheduling, weighted wheel geometry, deterministic replay, request isolation, and complete career runs across thirty seeds. The identity suite checks forged-header and origin handling. The SQLite suite verifies the real schema, atomic reward updates, request replay, and membership constraints.
 
-`tests/integration.mjs` exercises the real HTTP API against an isolated development database, creating disposable test careers. It covers duplicate requests, simultaneous spins, scoring, continuation, audio uploads and isolation, invitations, role enforcement, and kit gating. Run it only against a test instance:
+`tests/integration.mjs` exercises the real HTTP API against an isolated development database, creating disposable test careers. It covers duplicate requests, simultaneous spins, scoring, continuation, audio uploads and isolation, invitations, role enforcement, kit gating, and malformed requests. Run it only against a test instance, with `pnpm dev` running:
 
 ```sh
 LARO_TEST_URL=http://localhost:5173 node tests/integration.mjs
 ```
-
-The managed preview service is reachable through its browser route but may not be reachable from the executor's network namespace. In that environment, use browser QA and the domain/SQL tests rather than claiming the HTTP suite passed.
 
 ## Audio and learning scope
 
