@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
@@ -15,10 +16,16 @@ const { d1, r2 } = hostingConfig;
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const managedLinux = readExecutionProfile() === "managed-linux";
 
+// The Cloudflare plugin appends this config to wrangler.toml, so declaring D1 in
+// both places emits two `DB` bindings, which Wrangler refuses to run.
+const wranglerTomlDeclaresD1 =
+  existsSync("wrangler.toml") &&
+  readFileSync("wrangler.toml", "utf8").includes("[[d1_databases]]");
+
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
-  d1_databases: d1
+  d1_databases: d1 && !wranglerTomlDeclaresD1
     ? [
         {
           binding: d1,
