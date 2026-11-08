@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 const base=process.env.LARO_TEST_URL||'http://localhost:5173';
-function client(){let cookie='';return async(path,body,form=false)=>{
-  const r=await fetch(base+'/api/'+path,{method:body?'POST':'GET',headers:{...(cookie?{Cookie:cookie}:{}),...(body&&!form?{'Content-Type':'application/json'}:{})},body:body?(form?body:JSON.stringify(body)):undefined});
+function client(){let cookie='';return async(path,body,form=false,extra={})=>{
+  const r=await fetch(base+'/api/'+path,{method:body?'POST':'GET',headers:{...(cookie?{Cookie:cookie}:{}),...(body&&!form?{'Content-Type':'application/json'}:{}),...extra},body:body?(form?body:JSON.stringify(body)):undefined});
   if(r.headers.get('set-cookie'))cookie=r.headers.get('set-cookie').split(';')[0];
   const type=r.headers.get('content-type')||'';return {status:r.status,data:type.includes('application/json')?await r.json():await r.arrayBuffer()};
 };}
@@ -28,5 +28,10 @@ assert.equal((await learner('join',{invite:a.data.invite})).status,200);assert.e
 assert.equal((await learner(custom.audio.replace('/api/',''))).status,200);
 assert.equal((await learner('phrases',upload,true)).status,403);
 assert.equal((await creator('kit',{requestId:crypto.randomUUID(),version:saved.version,kit:'gold'})).status,400);
+assert.equal((await creator('season',{requestId:crypto.randomUUID(),version:saved.version})).status,400);
+assert.equal((await creator('kit','null',true)).status,400);
+assert.equal((await creator('phrases',{not:'a form'})).status,400);
+assert.equal((await creator('kit',{requestId:crypto.randomUUID(),version:saved.version,kit:'lime'},false,{Origin:'null'})).status,403);
+const punctuation=new FormData();for(const [k,v]of Object.entries({phrase:'!!!',meaning:'Nothing.',context:'Integration test only.',category:'Barkada'}))punctuation.set(k,v);assert.equal((await creator('phrases',punctuation,true)).status,400);
 const refreshed=(await learner('state')).data;assert.equal(refreshed.state.spins,4);assert.equal(refreshed.state.pending,null);
-console.log('Integration passed: persistence, duplicate requests, concurrent spins, grading, recovery, uploads, invite roles, audio isolation, and locked rewards.');
+console.log('Integration passed: persistence, duplicate requests, concurrent spins, grading, recovery, uploads, invite roles, audio isolation, locked rewards, and malformed-request handling.');

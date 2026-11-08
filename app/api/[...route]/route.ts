@@ -25,12 +25,13 @@ export async function POST(req:Request){
     const path=new URL(req.url).pathname;
     const c=await getContext(req);
     if(path==='/api/phrases'){
-      owner(c);const form=await req.formData();
+      owner(c);const form=await req.formData().catch(()=>{throw new ApiError(400,'Please check your request.');});
       const text=(key:string,max:number,required=true)=>{const v=form.get(key);if(typeof v!=='string'||v.trim().length>max||(required&&!v.trim()))throw new ApiError(400,`Please check ${key}.`);return v.trim();};
       const source=String(form.get('source')||'')||null;
       const editId=String(form.get('id')||'')||null;
       if(source&&!CATALOG.some(p=>p.id===source))throw new ApiError(400,'Unknown phrase.');
       const phrase=text('phrase',180),meaning=text('meaning',240),context=text('context',1400);
+      if(!/\p{L}/u.test(phrase))throw new ApiError(400,'Please check phrase.');
       const category=text('category',30);if(!['Lambing','Barkada','Family','Pop culture','Matchday'].includes(category))throw new ApiError(400,'Choose a category.');
       const existing=source?await db().prepare('SELECT id,audio FROM phrases WHERE club=? AND source=?').bind(c.club,source).first<{id:string;audio:string|null}>():editId?await db().prepare('SELECT id,audio FROM phrases WHERE club=? AND id=? AND source IS NULL').bind(c.club,editId).first<{id:string;audio:string|null}>():null;
       if(editId&&!existing)throw new ApiError(404,'Phrase not found.');
@@ -45,7 +46,8 @@ export async function POST(req:Request){
       else await db().prepare('INSERT INTO phrases (id,club,phrase,meaning,context,category,audio,source,created) VALUES (?,?,?,?,?,?,?,?,?)').bind(id,c.club,phrase,meaning,context,category,audio,source,Date.now()).run();
       return json({ok:true},201);
     }
-    const body=await req.json() as Record<string,unknown>;
+    const body=await req.json() as Record<string,unknown>|null;
+    if(typeof body!=='object'||body===null||Array.isArray(body))throw new ApiError(400,'Please check your request.');
     if(path==='/api/join'){
       if(typeof body.invite!=='string'||!/^\w{32}$/.test(body.invite))throw new ApiError(400,'This invite is not valid.');
       const target=await db().prepare('SELECT id FROM clubs WHERE invite=?').bind(body.invite).first<{id:string}>();
@@ -78,14 +80,19 @@ export async function POST(req:Request){
       await save(c,{...c.state,kit},id,{});return json(snapshot(c));
     }
     if(path==='/api/season'){
+      if(!isCareerComplete(c.state)||c.state.pending)throw new ApiError(400,'Finish this career and any open quiz first.');
       await save(c,nextSeason(c.state),id,{});return json(snapshot(c));
     }
     return json({error:'Not found.'},404);
-  }catch(e){return failure(e);}
+  }catch(e){
+    // Drain a body rejected before it was read; Wrangler's dev proxy fails the next request on that connection otherwise.
+    await req.text().catch(()=>{});
+    return failure(e);
+  }
 }
 function failure(e:unknown){
   if(e instanceof ApiError)return json({error:e.message},e.status);
   if(e instanceof SyntaxError)return json({error:'Please check your request.'},400);
   console.error('Laro API:',e instanceof Error?e.message:'Unknown error');
-  return json({error:e instanceof Error?e.message:'Something went wrong. Try again.'},500);
+  return json({error:'Something went wrong. Try again.'},500);
 }

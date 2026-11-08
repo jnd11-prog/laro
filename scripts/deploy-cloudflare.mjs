@@ -5,6 +5,8 @@
 //   LARO_R2_BUCKET=laro-audio \
 //   LARO_APPLY_SCHEMA=1 \            (first deploy only)
 //   node scripts/deploy-cloudflare.mjs
+//
+// LARO_DRY_RUN=1 bundles and validates without touching your Cloudflare account.
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
@@ -27,6 +29,8 @@ for (const db of config.d1_databases ?? []) {
   db.database_name = "laro";
 }
 for (const bucket of config.r2_buckets ?? []) bucket.bucket_name = LARO_R2_BUCKET;
+// No managed edge sits in front of this Worker, so the host's identity header could be forged.
+config.vars = { ...config.vars, LARO_DISABLE_HOST_AUTH: "1" };
 writeFileSync(file, JSON.stringify(config, null, 2));
 console.log(`Configured ${config.name}: D1 ${LARO_D1_ID}, R2 ${LARO_R2_BUCKET}`);
 
@@ -35,10 +39,11 @@ const run = (args) => {
   if (r.status !== 0) process.exit(r.status ?? 1);
 };
 // First deploy only: create the tables (set LARO_APPLY_SCHEMA=1). Re-running would fail on existing tables.
-if (process.env.LARO_APPLY_SCHEMA === "1") {
+const dryRun = process.env.LARO_DRY_RUN === "1";
+if (process.env.LARO_APPLY_SCHEMA === "1" && !dryRun) {
   const { readdirSync } = await import("node:fs");
   for (const sql of readdirSync(new URL("../drizzle/", import.meta.url)).filter((f) => f.endsWith(".sql")).sort()) {
     run(["wrangler", "d1", "execute", "DB", "--remote", "--config", "dist/server/wrangler.json", "--file", `drizzle/${sql}`]);
   }
 }
-run(["wrangler", "deploy", "--config", "dist/server/wrangler.json"]);
+run(["wrangler", "deploy", "--config", "dist/server/wrangler.json", ...(dryRun ? ["--dry-run"] : [])]);

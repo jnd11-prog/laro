@@ -1,13 +1,14 @@
 import { env } from 'cloudflare:workers';
 import { CATALOG } from './catalog';
 import { initialCareer, upgradeCareer, upgradePending } from './engine';
+import { hostAuthenticatedUser, isSameOrigin } from './identity';
 import type { Career, Phrase, Snapshot } from './types';
 
 export class ApiError extends Error { constructor(public status:number,message:string){super(message);} }
 export function db(){if(!env.DB)throw new Error('Database unavailable.');return env.DB;}
 export type Context={actor:string;club:string;role:string;signedIn:boolean;cookie?:string;state:Career;version:number;phrases:Phrase[];invite?:string};
 export async function getContext(req:Request, initialize=false):Promise<Context>{
-  const user=req.headers.get('oai-authenticated-user-id');
+  const user=hostAuthenticatedUser(req.headers,(env as {LARO_DISABLE_HOST_AUTH?:string}).LARO_DISABLE_HOST_AUTH);
   const guest=req.headers.get('cookie')?.match(/(?:^|;\s*)laro_guest=([a-f0-9-]{36})(?:;|$)/)?.[1];
   if(!user&&!guest&&!initialize)throw new ApiError(401,'Open your career before continuing.');
   const token=guest||crypto.randomUUID();const actor=user?`user:${user}`:`guest:${token}`;
@@ -45,4 +46,4 @@ export async function save(c:Context,state:Career,id:string,payload:unknown){
 export async function prior(c:Context,id:string){return db().prepare('SELECT payload FROM events WHERE id=? AND club=?').bind(`${c.club}:${id}`,c.club).first<{payload:string}>();}
 export function checkVersion(c:Context,value:unknown){if(value!==c.version)throw new ApiError(409,'Your career changed in another tab. Reloading the latest progress.');}
 export function requestId(value:unknown):string{if(typeof value!=='string'||!/^[-\w]{8,80}$/.test(value))throw new ApiError(400,'Invalid action ID.');return value;}
-export function sameOrigin(req:Request){const origin=req.headers.get('origin');if(origin&&new URL(origin).host!==new URL(req.url).host)throw new ApiError(403,'Please use the game page to make changes.');}
+export function sameOrigin(req:Request){if(!isSameOrigin(req.headers.get('origin'),req.url))throw new ApiError(403,'Please use the game page to make changes.');}
