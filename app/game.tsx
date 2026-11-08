@@ -1,174 +1,407 @@
+// @ts-nocheck
 'use client';
-
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowRight, ArrowUpRight, BookOpen, Check, CheckCircle2, ChevronRight, CircleHelp, Copy, Flag, Globe2, Headphones, Heart, Home, LoaderCircle, LockKeyhole, Mic, Pause, Play, Plus, Settings2, Shield, Shirt, Sparkles, Trophy, Upload, Volume2, VolumeX, X, Zap } from 'lucide-react';
-import type { Career, CareerEvent, Phrase, Snapshot, SpinQuestion } from '@/lib/types';
-import { initialCareer, getSpinQuestion, isCareerComplete, AWARDS } from '@/lib/engine';
-import {landingRotation} from '@/lib/wheel';
-import {quizView} from '@/lib/quiz';
+// Recovered from the deployed site's compiled bundle, so local names are short.
+import { createElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowRight, ArrowUpRight, BookOpen, Check, ChevronRight, CircleCheck, Copy, Earth, Flag, Headphones, Heart, House, LoaderCircle, LockKeyhole, Mic, Pause, Play, Plus, Settings2, Shirt, Sparkles, Trophy, Upload, Volume2, VolumeX, X, Zap } from 'lucide-react';
+import { AWARDS, exerciseDifficulty, getSpinQuestion, initialCareer, isCareerComplete, nationalityLabels, quizRewards } from '@/lib/engine';
+import { landingRotation } from '@/lib/wheel';
+import { quizView } from '@/lib/quiz';
 import { arcade } from '@/lib/arcade';
 import { CATALOG } from '@/lib/catalog';
-import { Jersey, KIT_COLORS, PixelBall, PixelHeart, PixelTrophy, Pitch, Wheel, WHEEL } from './art';
+import { AGREE_EXAMPLES, PHRASE_GUIDE } from '@/lib/phrase-guide';
+import { Jersey, KIT_COLORS, PixelBall, PixelHeart, PixelTrophy, WHEEL, Wheel } from './art';
 
-type View='career'|'phrasebook'|'locker'|'studio';
-const pad=(n:number)=>String(n).padStart(2,'0');
-function newActionId(){return Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');}
-const ICONS={goal:Flag,training:Zap,match:Trophy,transfer:ArrowUpRight,message:Heart,rest:Sparkles,award:Trophy};
-const labels={goal:'GOAL',training:'TRAINING',match:'FULL TIME',transfer:'TRANSFER',message:'FROM SHELOMI',rest:'RECOVERY',award:'TROPHY'};
+const NATIONALITIES = nationalityLabels();
+const pad = (e2) => String(e2).padStart(2, `0`);
+function newActionId() {
+    return Array.from(crypto.getRandomValues(new Uint8Array(16)), (e2) => e2.toString(16).padStart(2, `0`)).join(``);
+}
+const ICONS = { goal: Flag, training: Zap, match: Trophy, transfer: ArrowUpRight, message: Heart, rest: Sparkles, award: Trophy };
+const labels = { goal: `GOAL`, training: `TRAINING`, match: `FULL TIME`, transfer: `TRANSFER`, message: `FROM SHELOMI`, rest: `RECOVERY`, award: `TROPHY` };
 
-export default function Game(){
-  const [snap,setSnap]=useState<Snapshot|null>(null),[view,setView]=useState<View>('career');
-  const [busy,setBusy]=useState(false),[spinning,setSpinning]=useState(false),[rotation,setRotation]=useState(0);
-  const [auto,setAuto]=useState(false),[speed,setSpeed]=useState(1),[sound,setSound]=useState(true),[reduced,setReduced]=useState(false);
-  const [notice,setNotice]=useState(''),[error,setError]=useState(''),[settings,setSettings]=useState(false),[help,setHelp]=useState(false);
-  const [filter,setFilter]=useState('All'),[detail,setDetail]=useState<Phrase|null>(null),[editing,setEditing]=useState<Phrase|'new'|null>(null);
-  const [audioActive,setAudioActive]=useState(false),[answerBusy,setAnswerBusy]=useState(false),[tiles,setTiles]=useState<number[]>([]);
-  const [counterTarget,setCounterTarget]=useState(0);
-  const [activeQuestion,setActiveQuestion]=useState<SpinQuestion|null>(null),[result,setResult]=useState<CareerEvent|null>(null),[activeRound,setActiveRound]=useState(1);
-  const [feedbackHold,setFeedbackHold]=useState(false),[countdown,setCountdown]=useState(6);
-  const lock=useRef(false),snapshotRef=useRef(snap),angle=useRef(0),audioRef=useRef<HTMLAudioElement|null>(null),synthRef=useRef<SpeechSynthesisUtterance|null>(null),lessonRef=useRef<HTMLElement>(null);
-  snapshotRef.current=snap;
-  const state=snap?.state||initialCareer();const phrases=snap?.phrases||CATALOG;
-  const question=activeQuestion||getSpinQuestion(state,phrases);
-  const pending=state.pending,phrase=phrases.find(p=>p.id===pending?.phraseId);
-  const quiz=pending&&phrase?quizView(pending,phrase):null,complete=isCareerComplete(state),profile=state.profile;
-  const lessonOpen=!!(pending&&phrase&&quiz&&view==='career'&&!spinning);
-  const duration=reduced?90:(auto?1500:2300)/speed;
-
-  useEffect(()=>{const open=!!((pending&&view==='career'&&!spinning)||detail||editing||settings||help);if(!open)return;const old=document.body.style.overflow;document.body.style.overflow='hidden';return()=>{document.body.style.overflow=old;};},[pending,view,spinning,detail,editing,settings,help]);
-  useEffect(()=>{if(!pending||view!=='career'||spinning)return;const el=lessonRef.current;el?.focus();const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){setAuto(false);setView('phrasebook');}if(e.key==='Tab'){const items=el?.querySelectorAll<HTMLElement>('button:not(:disabled)');if(!items?.length)return;const first=items[0],last=items[items.length-1];if(e.shiftKey&&(document.activeElement===first||document.activeElement===el)){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}};document.addEventListener('keydown',key);return()=>document.removeEventListener('keydown',key);},[pending?.id,pending?.solved,view,spinning]);
-  const notify=useCallback((text:string)=>setNotice(text),[]);
-  const load=useCallback(async()=>{
-    const r=await fetch('/api/state',{cache:'no-store'});const data=await r.json() as Snapshot & {error?:string};if(!r.ok)throw new Error(data.error||'Could not open your career.');setSnap(data);return data as Snapshot;
-  },[]);
-  useEffect(()=>{
-    let cancelled=false;
-    (async()=>{try{await load();const invite=new URLSearchParams(location.search).get('join');if(invite){const r=await fetch('/api/join',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({invite})});const data=await r.json() as {error?:string};if(!r.ok)throw new Error(data.error);await load();history.replaceState(null,'','/');notify('Career connected.');}}catch(e){if(!cancelled)setError((e as Error).message);}})();
-    let storedReduced:unknown;try{const saved=localStorage.getItem('laro-prefs-v2');if(saved){const p=JSON.parse(saved);setSpeed(p.speed||1);setSound(p.sound!==false);storedReduced=p.reduced;}}catch{/* Preferences are optional when storage is blocked. */}
-    setReduced(typeof storedReduced==='boolean'?storedReduced:matchMedia('(prefers-reduced-motion: reduce)').matches);
-    return()=>{cancelled=true;audioRef.current?.pause();window.speechSynthesis?.cancel();};
-  },[load,notify]);
-  // Reduced motion is stored only as an override, so a later OS setting change still applies.
-  useEffect(()=>{try{localStorage.setItem('laro-prefs-v2',JSON.stringify({speed,sound,reduced:reduced===matchMedia('(prefers-reduced-motion: reduce)').matches?undefined:reduced}));}catch{/* Preferences are optional when storage is blocked. */}},[speed,sound,reduced]);
-  useEffect(()=>{arcade.setEnabled(sound);},[sound]);
-  useEffect(()=>()=>arcade.stopSpin(),[]);
-  useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),4500);return()=>clearTimeout(t);},[notice]);
-  useEffect(()=>{const stop=()=>{if(document.hidden)setAuto(false);};document.addEventListener('visibilitychange',stop);return()=>document.removeEventListener('visibilitychange',stop);},[]);
-  useEffect(()=>{setTiles([]);setFeedbackHold(false);setCountdown(6);},[pending?.id]);
-
-  async function action(path:string,body:Record<string,unknown>={},ownedLock=false){
-    const current=snapshotRef.current;if(!current)throw new Error('Your career is still connecting.');
-    const r=await fetch(`/api/${path}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,version:current.version,requestId:newActionId()})});
-    const data=await r.json() as Snapshot & {event:CareerEvent;correct?:boolean;error?:string};if(!r.ok){if(r.status===409)await load();throw new Error(data.error||'Try again.');}
-    if(!ownedLock)setSnap(data);return data;
-  }
-  function advanceQuestion(){setResult(null);setActiveQuestion(null);setRotation(0);angle.current=0;setCounterTarget(0);}
-  const spin=useCallback(async()=>{
-    if(lock.current||!snapshotRef.current||snapshotRef.current.state.pending||isCareerComplete(snapshotRef.current.state))return;
-    arcade.unlock();arcade.click();lock.current=true;setBusy(true);setError('');setSpinning(true);setResult(null);setCounterTarget(0);
-    const before=getSpinQuestion(snapshotRef.current.state,snapshotRef.current.phrases);
-    setActiveRound(before.step||snapshotRef.current.state.spins+1);setActiveQuestion(before);angle.current=0;setRotation(0);
-    try{
-      const data=await action('spin',{},true),q=data.event.wheel||before;
-      setActiveQuestion(q);const index=data.event.optionIndex??0;
-      if(q.presentation==='counter')setCounterTarget(Number(data.event.outcome)||0);
-      else {const target=landingRotation(q.options,index);angle.current=target;setRotation(target);}
-      arcade.spin(duration);
-      await new Promise(r=>setTimeout(r,duration+90));
-      setSnap(data);setResult(data.event);arcade.result(!!data.event.awardId);
-    }catch(e){setError((e as Error).message);setAuto(false);}finally{arcade.stopSpin();lock.current=false;setBusy(false);setSpinning(false);}
-  },[duration,load]);
-  useEffect(()=>{
-    if(!auto||busy||pending||view!=='career'||settings||help||detail||audioActive)return;
-    if(result){const t=setTimeout(()=>{advanceQuestion();if(complete)setAuto(false);},1100/speed);return()=>clearTimeout(t);}
-    if(complete){setAuto(false);return;}
-    const t=setTimeout(()=>spin(),600/speed);return()=>clearTimeout(t);
-  },[auto,busy,pending,result,complete,view,settings,help,detail,audioActive,speed,spin]);
-  async function continueCareer(){if(lock.current)return;lock.current=true;setAnswerBusy(true);try{await action('continue');advanceQuestion();setFeedbackHold(false);}catch(e){setError((e as Error).message);}finally{lock.current=false;setAnswerBusy(false);}}
-  useEffect(()=>{
-    if(!auto||!pending?.solved||feedbackHold||audioActive||answerBusy||settings||help||view!=='career')return;
-    if(countdown<=0){continueCareer();return;}
-    const t=setTimeout(()=>setCountdown(n=>n-1),1000);return()=>clearTimeout(t);
-  },[auto,pending?.solved,feedbackHold,audioActive,answerBusy,countdown,settings,help,view]);
-  async function answer(value:string){if(lock.current||!pending||pending.solved)return;lock.current=true;setAnswerBusy(true);setError('');try{arcade.unlock();const data=await action('answer',{challengeId:pending.id,answer:value});if(data.correct)arcade.correct();else arcade.wrong();setCountdown(6);}catch(e){setError((e as Error).message);}finally{lock.current=false;setAnswerBusy(false);}}
-  async function listen(p:Phrase){
-    setFeedbackHold(true);audioRef.current?.pause();window.speechSynthesis?.cancel();setAudioActive(true);
-    if(p.audio){const a=new Audio(p.audio);audioRef.current=a;a.onended=()=>setAudioActive(false);a.onerror=()=>{setAudioActive(false);notify('That recording could not be played. Try again.');};try{await a.play();}catch{setAudioActive(false);notify('Tap Listen again to play the recording.');}return;}
-    if(!('speechSynthesis' in window)){setAudioActive(false);notify('No device voice available. Shelomi can add a recording in the studio.');return;}
-    const voices=window.speechSynthesis.getVoices();const voice=voices.find(v=>/^(fil|tl)(-|$)/i.test(v.lang));
-    if(!voice){setAudioActive(false);notify('A Filipino device voice isn’t available here. Add a real recording in Shelomi’s studio');return;}
-    const u=new SpeechSynthesisUtterance(p.phrase);u.lang=voice.lang;u.voice=voice;u.rate=.8;u.onend=()=>setAudioActive(false);u.onerror=()=>setAudioActive(false);synthRef.current=u;window.speechSynthesis.speak(u);
-  }
-  function changeView(v:View){setView(v);setAuto(false);setError('');}
-  function toggleAuto(){arcade.unlock();arcade.click();setAuto(v=>!v);}
-  const studied=Object.keys(state.reviews).length,mastered=Object.values(state.reviews).filter(r=>r.streak>=3).length;
-  const nextTalk=4-state.spins%4;
-
-  return <div className={`app-shell ${view==='career'?'play-mode':''}`}>
-    {!lessonOpen&&<div className="workspace">
-      <header className="topbar"><div className="breadcrumb"><span>CHRIS’S CAREER</span><ChevronRight size={13}/><b>{view==='career'?`RUN ${pad(state.season)}`:view==='phrasebook'?'PHRASEBOOK':view==='locker'?'LOCKER ROOM':'THE STUDIO'}</b></div><div className="top-actions"><span className="save-status"><i/>{snap?'SAVED':'CONNECTING'}</span><div className="xp-counter"><Zap size={15} fill="currentColor"/>{state.xp.toLocaleString()}<span>XP</span></div><button className="icon-button" title={sound?'Mute game sounds':'Enable game sounds'} aria-label={sound?'Mute game sounds':'Enable game sounds'} onClick={()=>{arcade.unlock();setSound(!sound);}}>{sound?<Volume2 size={18}/>:<VolumeX size={18}/>}</button><button className="icon-button" aria-label="Game settings" onClick={()=>setSettings(true)}><Settings2 size={18}/></button><div className="user-avatar">C<span/></div></div></header>
-      <nav className="quick-nav" aria-label="Game navigation"><button className={view==='career'?'active':''} onClick={()=>changeView('career')}>CAREER</button><button className={view==='phrasebook'?'active':''} onClick={()=>changeView('phrasebook')}>TAGALOG</button><button className={view==='locker'?'active':''} onClick={()=>changeView('locker')}>KITS</button>{snap?.role==='owner'&&<button className={view==='studio'?'active':''} onClick={()=>changeView('studio')}>STUDIO</button>}<button onClick={()=>setHelp(true)} aria-label="How to play">?</button></nav>
-      <main>
-        {error&&<div className="error-banner" role="alert"><span>{error}</span>{!snap&&<button onClick={()=>load().then(()=>setError('')).catch(e=>setError(e.message))}>Retry</button>}<button aria-label="Dismiss error" onClick={()=>setError('')}><X size={16}/></button></div>}
-        {view==='career'&&<>
-          <div className="simple-intro"><h1 className="pixel">CAREER {pad(state.season)}</h1><span>{state.builder?.choices.length||0} FOOTBALL ROUNDS · {studied} PHRASES</span></div>
-          <div className="career-grid simple-career">
-            <section className={`wheel-panel panel ${complete&&!result?'completed-panel':''}`}>
-              {complete&&!result?<div className="career-complete"><PixelTrophy size={52}/><span className="eyebrow">RUN {pad(state.season)} FINISHED</span><h2 className="pixel">CAREER COMPLETE</h2><p>{profile?.position} · {profile?.nationality} · {profile?.seasons} seasons</p><div className="final-numbers"><div><strong>{profile?.overall}</strong><span>OVERALL</span></div><div><strong>{profile?.goals||0}</strong><span>GOALS</span></div><div><strong>{profile?.assists||0}</strong><span>ASSISTS</span></div></div><button className="primary-button" onClick={()=>{arcade.unlock();action('season').then(()=>advanceQuestion()).catch(e=>setError(e.message));}}>NEW CAREER<ArrowRight size={18}/></button><small>XP, kits, and Tagalog progress stay.</small></div>:<>
-                <div className="question-heading"><div className="question-meta"><span className="step-badge">{question.id==='phrase'?'TAGALOG':`STEP ${pad(activeQuestion?activeRound:question.step||1)}`}</span><span>{question.id==='phrase'?'PRACTICE':questionGroup(question.id)}</span></div><h2>{question.prompt}</h2></div>
-                {result&&!spinning&&<div className="result-reveal" role="status"><span>RESULT</span><strong>{result.title}</strong><small>{result.reward}</small></div>}
-                <div className="wheel-playground">{question.presentation==='counter'?<Counter key={question.id} target={counterTarget} animate={spinning} duration={duration}/>:<Wheel key={question.id} question={question} rotation={rotation} spinning={spinning} onSpin={()=>result?advanceQuestion():spin()} disabled={!snap||busy||!!pending} reduced={reduced} duration={duration}/>}</div>
-                <div className="wheel-controls"><button className="primary-button spin-button" onClick={()=>{arcade.unlock();if(result)advanceQuestion();else void spin();}} disabled={!snap||busy||!!pending}>{busy?<LoaderCircle size={18} className="loading"/>:result?<ArrowRight size={18}/>:<Play size={18} fill="currentColor"/>}{busy?(question.presentation==='counter'?'ROLLING':'SPINNING'):result?(complete?'SEE CAREER':'NEXT QUESTION'):(question.presentation==='counter'?'ROLL':'SPIN')}</button><div className="play-settings"><button className={`auto-toggle ${auto?'on':''}`} onClick={toggleAuto} disabled={!snap} role="switch" aria-label="Auto-spin" aria-checked={auto}><span className="toggle-track"><span/></span><span>AUTO-SPIN {auto?'ON':'OFF'}</span></button><button className="speed-button" disabled={busy} onClick={()=>setSpeed(v=>v===1?2:1)} aria-label={`Spin speed ${speed}x. Click to change.`}>{speed}×</button><button className={`sound-control ${sound?'on':''}`} onClick={()=>{arcade.unlock();setSound(!sound);}} aria-label={sound?'Mute game sounds':'Enable game sounds'}>{sound?<Volume2 size={18}/>:<VolumeX size={18}/>}<span>{sound?'SOUND ON':'SOUND OFF'}</span></button></div></div>
-                {question.options.length>0&&<details className="wheel-options"><summary>VIEW OUTCOMES <span>{question.options.filter(o=>!o.blocked).length}</span></summary><div>{question.options.map(o=><span key={o.id} className={o.blocked?'blocked':''}><i style={{background:o.color}}/>{o.label}</span>)}</div></details>}
-              </>}
-            </section>
-            <aside className="career-right">
-              <section className="player-panel panel"><div className="player-top"><span className="eyebrow">PLAYER CARD</span><span className="rookie-tag">{state.rating||'—'} OVR</span></div><div className="player-identity"><Jersey kit={state.kit} size={112}/><div><div className="player-name pixel">CHRIS</div><span className="player-position">{profile?.position||'POSITION —'} · #07</span><div className="club-name">{profile?.club||'Club not drawn'}</div><span className="player-nationality">{profile?.nationality||'Nationality —'}</span></div></div><div className="six-stats">{(profile?.stats||[]).map(stat=><div key={stat.key}><span>{stat.label.toUpperCase()}</span><b>{stat.value??'—'}</b><div><i style={{width:`${stat.value||0}%`}}/></div></div>)}</div><div className="player-facts"><span>DEBUT <b>{profile?.debut||'—'}</b></span><span>HEIGHT <b>{profile?.height||'—'}</b></span><span>FOOT <b>{profile?.foot||'—'}</b></span><span>SEASONS <b>{profile?.seasons||'—'}</b></span></div></section>
-              <section className="trophy-panel panel"><h2 className="pixel">TROPHIES <span>{Object.values(state.trophies).reduce((a,b)=>a+b,0)}</span></h2><div className="trophy-grid">{AWARDS.map(a=><div key={a.id} title={a.name} className={state.trophies[a.id]?'won':''}><PixelTrophy size={30}/><span>{a.label}</span><b>{state.trophies[a.id]?`×${state.trophies[a.id]}`:'—'}</b></div>)}</div></section>
-              <div className="next-moment"><PixelHeart size={15}/><span>{pending?'Tagalog round waiting.':complete?'Career saved.':`Tagalog in ${nextTalk} ${nextTalk===1?'spin':'spins'}.`}</span><span className="little-dots">{[1,2,3,4].map(n=><i key={n} className={n<=state.spins%4?'filled':''}/>)}</span></div>
-            </aside>
-          </div>
-          {!!profile?.clubs?.length&&<section className="club-history panel"><h2>CLUB HISTORY</h2>{profile.clubs.map((club,i)=><div key={i}><span className="club-index">{pad(i+1)}</span><div><b>{club.name}</b><span>{club.league} · {club.years||'—'} seasons</span></div><span className="club-trophies">{club.lt||0} league · {club.dc||0} cups{club.euroWon?.length?` · ${club.euroWon.join(', ')}`:''}</span></div>)}</section>}
-          <section className="story-section"><div className="section-heading"><h2 className="pixel">LAST SPINS</h2></div><div className="story-grid">{state.history.length?state.history.slice(0,3).map((e,i)=><EventCard key={e.id} event={e} latest={i===0}/>):<div className="empty-story"><PixelBall size={24}/><p>No spins yet.</p></div>}</div></section>
-        </>}
-
-        {view==='phrasebook'&&<><PageTitle eyebrow="TAGALOG" title="Phrasebook" description="Phrases and meanings."/><div className="summary-strip"><div><b>{studied}</b><span>DISCOVERED</span></div><div><b>{mastered}</b><span>RECALLED 3× IN A ROW</span></div><div><b>{phrases.length}</b><span>IN PLAY</span></div></div><div className="filter-row">{['All','Lambing','Barkada','Family','Pop culture','Matchday'].map(f=><button key={f} onClick={()=>setFilter(f)} className={filter===f?'filter active':'filter'}>{f}</button>)}</div><div className="phrase-grid">{phrases.filter(p=>filter==='All'||p.category===filter).map(p=><button className="phrase-card panel" key={p.id} onClick={()=>setDetail(p)}><div><span className={`category-tag ${p.category==='Lambing'?'pink':''}`}>{p.category}</span>{state.reviews[p.id]?<span className="phrase-status"><Check size={13}/> {state.reviews[p.id].streak>=3?'Practiced':'Discovered'}</span>:<span className="phrase-status muted">New</span>}</div><h3>{p.phrase}</h3><p>{p.meaning}</p><footer><span><Volume2 size={13}/>{p.audio?'Shelomi’s recording':'Device voice'}</span><ArrowUpRight size={17}/></footer></button>)}</div></>}
-
-        {view==='locker'&&<><PageTitle eyebrow="KITS" title="Locker room" description="Unlock kits with XP."/><div className="locker-header panel"><Jersey kit={state.kit} size={130}/><div><span className="eyebrow">CHRIS · #07</span><h2>{state.club}</h2><p>{state.xp} career XP · {state.kit.charAt(0).toUpperCase()+state.kit.slice(1)} kit equipped</p></div><span className="outlined-tag">DIVISION {state.division}</span></div><div className="kit-grid">{[{id:'lime',name:'The original',xp:0,desc:'Green home kit.'},{id:'blue',name:'Away from home',xp:150,desc:'Blue away kit.'},{id:'rose',name:'Lambing FC',xp:300,desc:'Pink alternate kit.'},{id:'gold',name:'Golden boy',xp:600,desc:'Gold special kit.'}].map(k=><div className={`kit-card panel ${state.kit===k.id?'equipped':''}`} key={k.id}><span className="eyebrow">{k.xp===0?'STARTER KIT':`${k.xp} XP UNLOCK`}</span><Jersey kit={k.id} size={170}/><h3>{k.name}</h3><p>{k.desc}</p><button className={state.kit===k.id?'secondary-button':'primary-button'} disabled={!snap||busy||state.xp<k.xp||state.kit===k.id} onClick={async()=>{if(lock.current)return;lock.current=true;setBusy(true);try{await action('kit',{kit:k.id});notify('Kit equipped.');}catch(e){setError((e as Error).message);}finally{lock.current=false;setBusy(false);}}}>{state.kit===k.id?<><Check size={15}/>Equipped</>:state.xp<k.xp?<><LockKeyhole size={14}/>{k.xp-state.xp} XP to go</>:<>Equip kit<ArrowRight size={15}/></>}</button></div>)}</div></>}
-
-        {view==='studio'&&<><PageTitle eyebrow="LESSONS" title="Shelomi’s studio" description="Add phrases, context, and voice recordings."/><div className="studio-banner panel"><div className="studio-heart"><PixelHeart size={35}/></div><div><h2>Add a lesson.</h2><p>Add a voice recording to a phrase, or write a completely new one.</p></div><button className="primary-button" onClick={()=>setEditing('new')} disabled={!snap}><Plus size={17}/>Add a phrase</button></div><div className="studio-columns"><section className="panel studio-list"><div className="panel-heading"><h2>Your lesson collection</h2><span className="eyebrow">{phrases.length} PHRASES</span></div>{phrases.map(p=><div className="studio-row" key={p.id}><div className={`studio-phrase-icon ${p.audio?'recorded':''}`}><Volume2 size={17}/></div><div><b>{p.phrase}</b><span>{p.category} · {p.audio?'Voice added':'Ready for your voice'}</span></div><button className="small-button" onClick={()=>setEditing(p)}>{p.audio?'Edit voice':'Add voice'}<Plus size={12}/></button></div>)}</section><aside><div className="panel studio-tip"><Headphones size={24}/><h3>Voice recordings</h3><p>Record a phrase the way you’d say it to Chris. Add when you use it and what it means to you.</p><p>Default audio uses a Filipino device voice when available. Your recording replaces it.</p></div><div className="panel studio-tip"><BookOpen size={23}/><h3>Chris’s progress</h3><p>{studied} phrases discovered.<br/>{mastered} recalled correctly at least three times in a row.</p><div className="progress-track"><span style={{width:`${studied/phrases.length*100}%`}}/></div></div><div className="panel studio-tip"><Heart size={23}/><h3>Invite Chris</h3><p>An invite connects Chris to this career as a learner. Site access must also allow him to open this private app.</p><button className="secondary-button" onClick={async()=>{if(!snap?.invite)return;try{await navigator.clipboard.writeText(`${location.origin}/?join=${snap.invite}`);notify('Career invite copied. The app is private until you change its sharing access.');}catch{notify('Clipboard unavailable. Try again in a browser tab.');}}}><Copy size={14}/>Copy career invite</button></div></aside></div></>}
-      </main><div className="mobile-nav">{([['career',Home,'Career'],['phrasebook',BookOpen,'Phrases'],['locker',Shirt,'Kits'],...(snap?.role==='owner'?[['studio',Heart,'Studio']]:[])] as [View,typeof Home,string][]).map(([v,I,t])=><button key={String(v)} className={view===v?'active':''} onClick={()=>changeView(v as View)}><I size={19}/><span>{t}</span></button>)}</div>
-    </div>}
-
-    {lessonOpen&&pending&&phrase&&quiz&&<div className="modal-backdrop lesson-backdrop"><section className="lesson-modal quiz-v3" ref={lessonRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="lesson-title"><div className="lesson-header"><div><PixelHeart size={21}/><span>TAGALOG CHECKPOINT</span></div><span className="auto-paused"><Pause size={12}/>{auto?'AUTO PAUSED':'CAREER PAUSED'}</span><button className="icon-button" aria-label="Save and leave conversation" onClick={()=>{setAuto(false);setView('phrasebook');}}><X size={19}/></button></div><div className="lesson-columns"><div className="lesson-context"><span className="eyebrow">{phrase.category.toUpperCase()} · {pending.first?'NEW':'REVIEW'}</span><h2 id="lesson-title">{quiz.title}</h2>{quiz.meaning&&<p className="revealed-meaning" data-testid="quiz-meaning">{quiz.meaning}</p>}<button className="audio-button" onClick={()=>listen(phrase)} disabled={audioActive}><Volume2 size={18}/>{audioActive?'Playing…':'Listen'}</button><small>{phrase.audio?'SHELOMI’S RECORDING':'DEVICE VOICE IF AVAILABLE'}</small>{quiz.context&&<div className="revealed-context"><span>WHY IT FITS</span><p>{quiz.context}</p></div>}</div><div className="lesson-challenge">{pending.solved?<div className="success-view"><div className="success-icon"><Check size={29}/></div><span className="eyebrow">CORRECT</span><h3>{pending.feedback}</h3><span className="xp-earned"><Zap size={18} fill="currentColor"/>+{pending.earned} XP</span><button className="primary-button" onClick={()=>continueCareer()} disabled={answerBusy}>CONTINUE<ArrowRight size={18}/></button>{auto&&<button className="text-button countdown" onClick={()=>setFeedbackHold(!feedbackHold)}>{feedbackHold?'Auto-continue paused':`Continuing in ${countdown}s · tap to pause`}</button>}</div>:<><span className="eyebrow">YOUR ANSWER</span><h3>{quiz.prompt}</h3>{pending.mode==='build'?<><div className="tile-answer">{tiles.length?tiles.map((i,j)=><button key={j} onClick={()=>setTiles(tiles.filter((_,k)=>k!==j))}>{pending.options[i]}</button>):<span>Tap words in order</span>}</div><div className="word-tiles">{pending.options.map((t,i)=><button key={i} disabled={tiles.includes(i)} onClick={()=>setTiles([...tiles,i])}>{t}</button>)}</div><button className="primary-button" disabled={answerBusy||!tiles.length} onClick={()=>answer(tiles.map(i=>pending.options[i]).join(' '))}>CHECK ANSWER<ArrowRight size={18}/></button></>:<div className="answer-options">{pending.options.map((o,i)=><button key={i} disabled={answerBusy} onClick={()=>answer(o)}><span>{String.fromCharCode(65+i)}</span>{o}<ChevronRight size={17}/></button>)}</div>}{pending.feedback&&<p className="answer-feedback" role="status">{pending.feedback}</p>}<div className="lesson-reassurance">No timer.</div></>}</div></div></section></div>}
-
-    {detail&&<Modal title="Phrase details" onClose={()=>{setDetail(null);audioRef.current?.pause();window.speechSynthesis?.cancel();setAudioActive(false);}}><span className="category-tag">{detail.category}</span><h2 className="detail-phrase">{detail.phrase}</h2><p className="detail-meaning">{detail.meaning}</p><button className="audio-button" onClick={()=>listen(detail)}><Volume2 size={17}/>Listen<span className="voice-wave">▂▄▆▃▅▂</span></button><p className="detail-context">{detail.context}</p><span className="eyebrow">{detail.audio?'SHELOMI’S RECORDING':'FILIPINO DEVICE VOICE, WHEN AVAILABLE'}</span></Modal>}
-    {settings&&<Modal title="Settings" onClose={()=>setSettings(false)}><div className="setting-row"><div><b>Career speed</b><p>Time between automatic spins.</p></div><div className="segmented">{[1,2].map(n=><button key={n} className={speed===n?'active':''} onClick={()=>setSpeed(n)}>{n}×</button>)}</div></div><div className="setting-row"><div><b>Game sounds</b><p>Wheel ticks and result sounds.</p></div><button className={`auto-toggle ${sound?'on':''}`} role="switch" aria-checked={sound} aria-label="Game sounds" onClick={()=>{arcade.unlock();setSound(!sound);}}><span className="toggle-track"><span/></span></button></div><div className="setting-row"><div><b>Reduce motion</b><p>Resolve spins without the animation.</p></div><button className={`auto-toggle ${reduced?'on':''}`} role="switch" aria-checked={reduced} aria-label="Reduce motion" onClick={()=>setReduced(!reduced)}><span className="toggle-track"><span/></span></button></div><p className="settings-note">Your career saves automatically. Auto-spin pauses when you leave the tab and at every conversation.</p></Modal>}
-    {help&&<Modal title="Welcome to Laro FC" onClose={()=>setHelp(false)}><div className="help-steps">{[['01','Spin.','Each round asks a football question. The wheel picks the result and updates your career.'],['02','Learn.','Every fourth spin is a Tagalog round. Choose an answer to continue.'],['03','Continue.','The questions build your player, club history, competitions, and final career card. Auto-spin pauses for Tagalog quizzes.']].map(([n,t,d])=><div key={n}><span className="pixel">{n}</span><div><h3>{t}</h3><p>{d}</p></div></div>)}</div><button className="primary-button" onClick={()=>setHelp(false)}>Let’s play<ArrowRight size={15}/></button></Modal>}
-    {editing&&<PhraseEditor phrase={editing==='new'?null:editing} onClose={()=>setEditing(null)} onSave={async()=>{await load();setEditing(null);notify('Phrase saved.');}}/>}
-    {notice&&<div className="toast" role="status"><CheckCircle2 size={19}/><span>{notice}</span><button aria-label="Dismiss notification" onClick={()=>setNotice('')}><X size={15}/></button></div>}
-  </div>;
+export default function Game() {
+    let [snap, setSnap] = useState(null), [view, setView] = useState(`career`), [busy, setBusy] = useState(false), [spinning, setSpinning] = useState(false), [rotation, setRotation] = useState(0), [auto, setAuto] = useState(false), [speed, setSpeed] = useState(1), [sound, setSound] = useState(true), [reduced, setReduced] = useState(false), [notice, setNotice] = useState(``), [error, setError] = useState(``), [settings, setSettings] = useState(false), [help, setHelp] = useState(false), [filter, setFilter] = useState(`All`), [detail, setDetail] = useState(null), [editing, setEditing] = useState(null), [audioActive, setAudioActive] = useState(false), [answerBusy, setAnswerBusy] = useState(false), [tiles, setTiles] = useState([]), [qe, H] = useState(false), [Je, Ye] = useState(``), [counterTarget, setCounterTarget] = useState(0), [activeQuestion, setActiveQuestion] = useState(null), [result, setResult] = useState(null), [activeRound, setActiveRound] = useState(1), [feedbackHold, setFeedbackHold] = useState(false), [countdown, setCountdown] = useState(6), W = useRef(false), snapshotRef = useRef(snap), st = useRef(0), ct = useRef(null), lt = useRef(null), lessonRef = useRef(null), dt = useRef({ y: 0, height: 0 }), wasLessonOpen = useRef(false);
+    snapshotRef.current = snap;
+    let state = snap?.state || initialCareer(), phrases = snap?.phrases || CATALOG, question = activeQuestion || getSpinQuestion(state, phrases), pending = state.pending, phrase = phrases.find((e3) => e3.id === pending?.phraseId), quiz = pending && phrase ? quizView(pending, phrase) : null, complete = isCareerComplete(state), profile = state.profile, lessonOpen = !!(pending && phrase && quiz && view === `career` && !spinning);
+    useLayoutEffect(() => {
+        if (wasLessonOpen.current && !lessonOpen && view === `career`) {
+            let e3 = document.getElementById(`career-quest`), t3 = () => {
+                e3?.scrollIntoView({ block: `start`, behavior: `instant` }), e3?.focus({ preventScroll: true });
+            };
+            t3(), requestAnimationFrame(t3);
+        }
+        wasLessonOpen.current = lessonOpen;
+    }, [lessonOpen, view]);
+    let duration = reduced ? 90 : (auto ? 1500 : 2300) / speed;
+    useEffect(() => {
+        if (!(pending && view === `career` && !spinning || detail || editing || settings || help || qe))
+            return;
+        let e3 = document.body.style.overflow;
+        return document.body.style.overflow = `hidden`, () => {
+            document.body.style.overflow = e3;
+        };
+    }, [pending, view, spinning, detail, editing, settings, help, qe]), useEffect(() => {
+        if (!pending || view !== `career` || spinning)
+            return;
+        let e3 = lessonRef.current;
+        e3?.focus({ preventScroll: true });
+        let t3 = (t4) => {
+            if (t4.key === `Escape` && (setAuto(false), setView(`phrasebook`)), t4.key === `Tab`) {
+                let n3 = e3?.querySelectorAll(`button:not(:disabled)`);
+                if (!n3?.length)
+                    return;
+                let r3 = n3[0], i3 = n3[n3.length - 1];
+                t4.shiftKey && (document.activeElement === r3 || document.activeElement === e3) ? (t4.preventDefault(), i3.focus()) : !t4.shiftKey && document.activeElement === i3 && (t4.preventDefault(), r3.focus());
+            }
+        };
+        return document.addEventListener(`keydown`, t3), () => document.removeEventListener(`keydown`, t3);
+    }, [pending?.id, pending?.solved, view, spinning]);
+    let notify = useCallback((e3) => setNotice(e3), []), load = useCallback(async () => {
+        let e3 = await fetch(`/api/state`, { cache: `no-store` }), n3 = await e3.json();
+        if (!e3.ok)
+            throw Error(n3.error || `Could not open your career.`);
+        return setSnap(n3), n3;
+    }, []);
+    useEffect(() => {
+        let e3 = false;
+        (async () => {
+            try {
+                await load();
+                let e4 = new URLSearchParams(location.search).get(`join`);
+                if (e4) {
+                    let t4 = await fetch(`/api/join`, { method: `POST`, headers: { "Content-Type": `application/json` }, body: JSON.stringify({ invite: e4 }) }), n3 = await t4.json();
+                    if (!t4.ok)
+                        throw Error(n3.error);
+                    await load(), history.replaceState(null, ``, `/`), notify(`Career connected.`);
+                }
+            }
+            catch (t4) {
+                e3 || setError(t4.message);
+            }
+        })();
+        let t3 = localStorage.getItem(`laro-prefs-v2`);
+        if (t3)
+            try {
+                let e4 = JSON.parse(t3);
+                setSpeed(e4.speed || 1), setSound(e4.sound !== false);
+            }
+            catch {
+            }
+        return setReduced(matchMedia(`(prefers-reduced-motion: reduce)`).matches), () => {
+            e3 = true, ct.current?.pause(), window.speechSynthesis?.cancel();
+        };
+    }, [load, notify]), useEffect(() => {
+        localStorage.setItem(`laro-prefs-v2`, JSON.stringify({ speed: speed, sound: sound }));
+    }, [speed, sound]), useEffect(() => {
+        arcade.setEnabled(sound);
+    }, [sound]), useEffect(() => () => arcade.stopSpin(), []), useEffect(() => {
+        if (!notice)
+            return;
+        let e3 = setTimeout(() => setNotice(``), 4500);
+        return () => clearTimeout(e3);
+    }, [notice]), useEffect(() => {
+        let e3 = () => {
+            document.hidden && setAuto(false);
+        };
+        return document.addEventListener(`visibilitychange`, e3), () => document.removeEventListener(`visibilitychange`, e3);
+    }, []), useEffect(() => {
+        setTiles([]), setFeedbackHold(false), setCountdown(6);
+    }, [pending?.id]);
+    async function action(e3, n3 = {}, r3 = false) {
+        let i3 = snapshotRef.current;
+        if (!i3)
+            throw Error(`Your career is still connecting.`);
+        let a3 = await fetch(`/api/${e3}`, { method: `POST`, headers: { "Content-Type": `application/json` }, body: JSON.stringify({ ...n3, version: i3.version, requestId: newActionId() }) }), o3 = await a3.json();
+        if (!a3.ok)
+            throw a3.status === 409 && await load(), Error(o3.error || `Try again.`);
+        return r3 || setSnap(o3), o3;
+    }
+    function advanceQuestion() {
+        setResult(null), setActiveQuestion(null), setRotation(0), st.current = 0, setCounterTarget(0);
+    }
+    let spin = useCallback(async () => {
+        if (W.current || !snapshotRef.current || snapshotRef.current.state.pending || isCareerComplete(snapshotRef.current.state))
+            return;
+        arcade.unlock(), arcade.click(), W.current = true, setBusy(true), setError(``), setSpinning(true), setResult(null), setCounterTarget(0);
+        let e3 = getSpinQuestion(snapshotRef.current.state, snapshotRef.current.phrases);
+        setActiveRound(snapshotRef.current.state.spins + 1), setActiveQuestion(e3), st.current = 0, setRotation(0);
+        try {
+            let n3 = await action(`spin`, {}, true), r3 = n3.event.wheel || e3;
+            setActiveQuestion(r3);
+            let i3 = n3.event.optionIndex ?? 0;
+            if (r3.presentation === `counter`)
+                setCounterTarget(Number(n3.event.outcome) || 0);
+            else {
+                let e4 = landingRotation(r3.options, i3);
+                st.current = e4, setRotation(e4);
+            }
+            arcade.spin(duration), await new Promise((e4) => setTimeout(e4, duration + 90)), dt.current = { y: window.scrollY, height: document.querySelector(`.workspace`)?.getBoundingClientRect().height || document.documentElement.scrollHeight }, setSnap(n3), setResult(n3.event), arcade.result(!!n3.event.awardId);
+        }
+        catch (e4) {
+            setError(e4.message), setAuto(false);
+        }
+        finally {
+            arcade.stopSpin(), W.current = false, setBusy(false), setSpinning(false);
+        }
+    }, [duration, load]);
+    useEffect(() => {
+        if (!auto || busy || pending || view !== `career` || settings || help || detail || audioActive)
+            return;
+        if (result) {
+            let e4 = setTimeout(() => {
+                advanceQuestion(), complete && setAuto(false);
+            }, 1100 / speed);
+            return () => clearTimeout(e4);
+        }
+        if (complete) {
+            setAuto(false);
+            return;
+        }
+        let e3 = setTimeout(() => spin(), 600 / speed);
+        return () => clearTimeout(e3);
+    }, [auto, busy, pending, result, complete, view, settings, help, detail, audioActive, speed, spin]);
+    async function xt() {
+        if (!W.current) {
+            W.current = true, setAnswerBusy(true);
+            try {
+                await action(`continue`), advanceQuestion(), setFeedbackHold(false);
+            }
+            catch (e3) {
+                setError(e3.message);
+            }
+            finally {
+                W.current = false, setAnswerBusy(false);
+            }
+        }
+    }
+    useEffect(() => {
+        if (!auto || !pending?.solved || feedbackHold || audioActive || answerBusy || settings || help || view !== `career`)
+            return;
+        if (countdown <= 0) {
+            xt();
+            return;
+        }
+        let e3 = setTimeout(() => setCountdown((e4) => e4 - 1), 1e3);
+        return () => clearTimeout(e3);
+    }, [auto, pending?.solved, feedbackHold, audioActive, answerBusy, countdown, settings, help, view]);
+    async function St() {
+        if (!W.current) {
+            W.current = true, setBusy(true), setAuto(false), setError(``);
+            try {
+                await action(`restart`, Je ? { nationality: Je } : {}), advanceQuestion(), setView(`career`), H(false), setSettings(false), setDetail(null), setTiles([]), setFeedbackHold(false), ct.current?.pause(), window.speechSynthesis?.cancel(), setAudioActive(false), notify(`New career started. Your Tagalog progress and XP are saved.`);
+            }
+            catch (e3) {
+                setError(e3.message);
+            }
+            finally {
+                W.current = false, setBusy(false);
+            }
+        }
+    }
+    async function Ct(e3) {
+        if (!(W.current || !pending || pending.solved)) {
+            W.current = true, setAnswerBusy(true), setError(``);
+            try {
+                arcade.unlock(), (await action(`answer`, { challengeId: pending.id, answer: e3 })).correct ? (arcade.correct(), setFeedbackHold(true)) : arcade.wrong(), setCountdown(6);
+            }
+            catch (e4) {
+                setError(e4.message);
+            }
+            finally {
+                W.current = false, setAnswerBusy(false);
+            }
+        }
+    }
+    async function wt(e3) {
+        if (setFeedbackHold(true), ct.current?.pause(), window.speechSynthesis?.cancel(), setAudioActive(true), e3.audio) {
+            let t4 = new Audio(e3.audio);
+            ct.current = t4, t4.onended = () => setAudioActive(false), t4.onerror = () => {
+                setAudioActive(false), notify(`That recording could not be played. Try again.`);
+            };
+            try {
+                await t4.play();
+            }
+            catch {
+                setAudioActive(false), notify(`Tap Listen again to play the recording.`);
+            }
+            return;
+        }
+        if (!(`speechSynthesis` in window)) {
+            setAudioActive(false), notify(`No device voice available. Shelomi can add a recording in the studio.`);
+            return;
+        }
+        let t3 = window.speechSynthesis.getVoices().find((e4) => /^(fil|tl)(-|$)/i.test(e4.lang));
+        if (!t3) {
+            setAudioActive(false), notify(`A Filipino device voice isn’t available here. Add a real recording in Shelomi’s studio`);
+            return;
+        }
+        let n3 = new SpeechSynthesisUtterance(e3.phrase);
+        n3.lang = t3.lang, n3.voice = t3, n3.rate = 0.8, n3.onend = () => setAudioActive(false), n3.onerror = () => setAudioActive(false), lt.current = n3, window.speechSynthesis.speak(n3);
+    }
+    function changeView(e3) {
+        setView(e3), setAuto(false), setError(``);
+    }
+    function toggleAuto() {
+        arcade.unlock(), arcade.click(), setAuto((e3) => !e3);
+    }
+    let Et = Object.keys(state.reviews).length, Dt = Object.values(state.reviews).filter((e3) => e3.streak >= 3).length, Ot = /^stat[0-5]$/.test(question.id);
+    return <div className={`app-shell ${view === `career` ? `play-mode` : ``}`}>{lessonOpen && <div aria-hidden="true" style={{ height: dt.current.height }}/>}{!lessonOpen && <div className="workspace"><header className="topbar"><button className="adventure-brand" onClick={() => changeView(`career`)} aria-label="Laro FC home"><PixelBall size={27}/><span>LARO FC</span></button><div className="breadcrumb"><span>HYUNG’S CAREER</span><ChevronRight size={13}/><b>{view === `career` ? `RUN ${pad(state.season)}` : view === `phrasebook` ? `PHRASEBOOK` : view === `locker` ? `LOCKER ROOM` : `THE STUDIO`}</b></div><div className="top-actions"><button className="restart-button" disabled={!snap || busy || answerBusy} onClick={() => {
+        setAuto(false), Ye(``), H(true);
+    }}>RESTART</button><span className="save-status"><i />{snap ? `SAVED` : `CONNECTING`}</span><div className="xp-counter"><Zap size={15} fill="currentColor"/>{state.xp.toLocaleString()}<span>XP</span></div><button className="icon-button" title={sound ? `Mute game sounds` : `Enable game sounds`} aria-label={sound ? `Mute game sounds` : `Enable game sounds`} onClick={() => {
+        arcade.unlock(), setSound(!sound);
+    }}>{sound ? <Volume2 size={18}/> : <VolumeX size={18}/>}</button><button className="icon-button" aria-label="Game settings" onClick={() => setSettings(true)}><Settings2 size={18}/></button><div className="user-avatar">H<span /></div></div></header><nav className="quick-nav" aria-label="Game navigation"><button className={view === `career` ? `active` : ``} onClick={() => changeView(`career`)}>CAREER</button><button className={view === `phrasebook` ? `active` : ``} onClick={() => changeView(`phrasebook`)}>TAGALOG</button><button className={view === `locker` ? `active` : ``} onClick={() => changeView(`locker`)}>KITS</button>{(!snap || snap.role === `owner`) && <button className={view === `studio` ? `active` : ``} onClick={() => changeView(`studio`)}>STUDIO</button>}<button onClick={() => setHelp(true)} aria-label="How to play">?</button></nav><main>{error && <div className="error-banner" role="alert"><span>{error}</span>{!snap && <button onClick={() => load().then(() => setError(``)).catch((e3) => setError(e3.message))}>Retry</button>}<button aria-label="Dismiss error" onClick={() => setError(``)}><X size={16}/></button></div>}{view === `career` && <>{state.spins === 0 && <section className="adventure-hero" aria-label="Career mode"><div className="adventure-hero-copy"><span className="adventure-kicker">{`RUN `}{pad(state.season)}{` · HYUNG`}</span><h1>Hyung’s career</h1><a href="#career-quest" className="quest-cta">{complete ? `VIEW CAREER` : `CONTINUE`}<ArrowRight size={17}/></a></div><span className="world-caption">MANCHESTER UNITED · HYUNG’S CLUB</span></section>}<div className="quest-path" aria-label="Career milestones">{[{ name: `Position`, done: !!profile?.position, icon: Shirt }, { name: `Nationality`, done: !!profile?.nationality, icon: Earth }, { name: `Attributes`, done: !!profile?.stats.every((e3) => e3.value !== null), icon: Zap }, { name: `Career results`, done: complete, icon: Trophy }].map((e3, t3) => <div key={e3.name} className={`quest-stop ${e3.done ? `done` : ``}`}><span className="quest-node">{e3.done ? <Check size={17}/> : createElement(e3.icon, { size: 18 })}</span><div><small>0{t3 + 1}</small><b>{e3.name}</b></div>{e3.done && <span className="quest-done">COMPLETE</span>}</div>)}</div><div className="simple-intro"><h2 className="pixel">UP NEXT</h2><span>{state.builder?.choices.length || 0}{` ROUNDS PLAYED · `}{Et}{` PHRASES REVIEWED`}</span></div><div className="career-grid simple-career"><section id="career-quest" tabIndex={-1} className={`wheel-panel panel ${complete && !result ? `completed-panel` : ``}`}>{complete && !result ? <div className="career-complete"><PixelTrophy size={52}/><span className="eyebrow">{`RUN `}{pad(state.season)}{` FINISHED`}</span><h2 className="pixel">CAREER COMPLETE</h2><p>{profile?.position}{` · `}{profile?.nationality}{` · `}{profile?.seasons}{` seasons`}</p><div className="final-numbers"><div><strong>{profile?.overall}</strong><span>OVERALL</span></div><div><strong>{profile?.goals || 0}</strong><span>GOALS</span></div><div><strong>{profile?.assists || 0}</strong><span>ASSISTS</span></div></div><button className="primary-button" onClick={() => {
+        arcade.unlock(), action(`season`).then(() => advanceQuestion()).catch((e3) => setError(e3.message));
+    }}>NEW CAREER<ArrowRight size={18}/></button><small>XP, kits, and Tagalog progress stay.</small></div> : <><div className="question-heading"><div className="question-meta"><span className="step-badge">{question.id === `phrase` ? `TAGALOG` : `ROUND ${pad(activeQuestion ? activeRound : state.spins + 1)}`}</span><span>{question.id === `phrase` ? `PRACTICE` : questionGroup(question.id)}</span></div><h2>{question.prompt}</h2></div>{result && !spinning && <div className="result-reveal" role="status"><span>RESULT</span><strong>{result.title}</strong><small>{result.reward}</small></div>}<div className="wheel-playground">{question.presentation === `counter` ? <Counter key={question.id} target={counterTarget} animate={spinning} duration={duration}/> : <Wheel key={question.id} question={question} rotation={rotation} spinning={spinning} onSpin={() => result ? advanceQuestion() : spin()} disabled={!snap || busy || !!pending} reduced={reduced} duration={duration}/>}</div><div className="wheel-controls"><button className="primary-button spin-button" onClick={() => {
+        arcade.unlock(), result ? advanceQuestion() : spin();
+    }} disabled={!snap || busy || !!pending}>{busy ? <LoaderCircle size={18} className="loading"/> : result ? <ArrowRight size={18}/> : <Play size={18} fill="currentColor"/>}{busy ? question.presentation === `counter` ? `ROLLING` : `SPINNING` : result ? complete ? `SEE CAREER` : `NEXT QUESTION` : question.presentation === `counter` ? `ROLL` : `SPIN`}</button><div className="play-settings"><button className={`auto-toggle ${auto ? `on` : ``}`} onClick={toggleAuto} disabled={!snap} role="switch" aria-label="Auto-spin" aria-checked={auto}><span className="toggle-track"><span /></span><span>{`AUTO-SPIN `}{auto ? `ON` : `OFF`}</span></button><button className="speed-button" disabled={busy} onClick={() => setSpeed((e3) => e3 === 1 ? 2 : 1)} aria-label={`Spin speed ${speed}x. Click to change.`}>{speed}×</button><button className={`sound-control ${sound ? `on` : ``}`} onClick={() => {
+        arcade.unlock(), setSound(!sound);
+    }} aria-label={sound ? `Mute game sounds` : `Enable game sounds`}>{sound ? <Volume2 size={18}/> : <VolumeX size={18}/>}<span>{sound ? `SOUND ON` : `SOUND OFF`}</span></button></div></div>{question.options.length > 0 && <details className="wheel-options"><summary>{`VIEW OUTCOMES `}<span>{question.options.filter((e3) => !e3.blocked).length}</span></summary><div>{question.options.map((e3) => <span key={e3.id} className={e3.blocked ? `blocked` : ``}><i style={{ background: e3.color }}/>{e3.label}</span>)}</div></details>}</>}</section><aside className="career-right"><section className="player-panel panel"><div className="player-top"><span className="eyebrow">PLAYER CARD</span><span className="rookie-tag">{state.rating || `—`}{` OVR`}</span></div><div className="player-identity"><Jersey kit={state.kit} size={112}/><div><div className="player-name pixel">HYUNG</div><span className="player-position">{profile?.position || `POSITION —`}{` · #07`}</span><div className="club-name">{profile?.club || `Club not drawn`}</div><span className="player-nationality">{profile?.nationality || `Nationality —`}</span></div></div><div className="six-stats">{(profile?.stats || []).map((e3) => <div key={e3.key}><span>{e3.label.toUpperCase()}</span><b>{e3.value ?? `—`}</b><div><i style={{ width: `${e3.value || 0}%` }}/></div></div>)}</div><div className="player-facts"><span>{`DEBUT `}<b>{profile?.debut || `—`}</b></span><span>{`HEIGHT `}<b>{profile?.height || `—`}</b></span><span>{`FOOT `}<b>{profile?.foot || `—`}</b></span><span>{`SEASONS `}<b>{profile?.seasons || `—`}</b></span></div></section><section className="trophy-panel panel"><h2 className="pixel">{`TROPHIES `}<span>{Object.values(state.trophies).reduce((e3, t3) => e3 + t3, 0)}</span></h2><div className="trophy-grid">{AWARDS.map((e3) => <div key={e3.id} title={e3.name} className={state.trophies[e3.id] ? `won` : ``}><PixelTrophy size={30}/><span>{e3.label}</span><b>{state.trophies[e3.id] ? `×${state.trophies[e3.id]}` : `—`}</b></div>)}</div></section><div className="next-moment"><PixelHeart size={15}/><span>{pending ? `Tagalog round waiting.` : complete ? `Career saved.` : Ot ? `Training question after this attribute.` : question.id === `wildcard` ? `Wildcard: −60 to +100 XP.` : question.id === `phrase` ? `Section complete · Tagalog checkpoint.` : profile?.clubs?.length ? `Next checkpoint: after this club’s seasons and trophies.` : `Next checkpoint: after attributes, weak foot, and skill moves.`}</span></div></aside></div>{!!profile?.clubs?.length && <section className="club-history panel"><h2>CLUB HISTORY</h2>{profile.clubs.map((e3, t3) => <div key={t3}><span className="club-index">{pad(t3 + 1)}</span><div><b>{e3.name}</b><span>{e3.league}{` · `}{e3.years || `—`}{` seasons`}</span></div><span className="club-trophies">{e3.lt || 0}{` league · `}{e3.dc || 0}{` cups`}{e3.euroWon?.length ? ` · ${e3.euroWon.join(`, `)}` : ``}</span></div>)}</section>}<section className="united-feature" aria-labelledby="united-title"><div className="united-masthead"><span>HYUNG’S CLUB</span><span>MANCHESTER UNITED</span><span>FAN CORNER</span></div><div className="united-feature-body"><div><span className="feature-kicker">OLD TRAFFORD · MATCHDAY</span><h2 id="united-title">Manchester<br />United.</h2><button className="primary-button" onClick={() => {
+        setFilter(`Matchday`), changeView(`phrasebook`), window.scrollTo({ top: 0, behavior: `instant` });
+    }}>MATCHDAY TAGLISH<ArrowRight size={17}/></button></div><div className="united-scarf" aria-hidden="true"><span>UNITED</span><b>07</b><span>HYUNG</span></div></div></section><section className="culture-edit" aria-labelledby="culture-title"><div className="culture-heading"><span className="eyebrow">TAGLISH</span><h2 id="culture-title">Conversations</h2></div><div className="culture-links">{[{ category: `Pop culture`, label: `TV & reactions`, title: `Grabe ang plot twist!`, phrase: `That plot twist is wild.` }, { category: `Barkada`, label: `The group chat`, title: `Game ka na ba?`, phrase: `Are you ready?` }, { category: `Lambing`, label: `Between you two`, title: `Miss na kita.`, phrase: `I miss you.` }].map((e3, t3) => <button key={e3.category} onClick={() => {
+        setFilter(e3.category), changeView(`phrasebook`), window.scrollTo({ top: 0, behavior: `instant` });
+    }}><span className="culture-number">0{t3 + 1}</span><div><small>{e3.label}</small><h3>{e3.title}</h3><p>{e3.phrase}</p></div><ArrowUpRight size={21}/></button>)}</div></section><section className="story-section"><div className="section-heading"><h2 className="pixel">CAREER RECAP</h2></div><div className="story-grid">{state.history.length ? state.history.slice(0, 3).map((e3, t3) => <EventCard key={e3.id} event={e3} latest={t3 === 0}/>) : <div className="empty-story"><PixelBall size={24}/><p>No spins yet.</p></div>}</div></section></>}{view === `phrasebook` && <><PageTitle eyebrow="TAGALOG" title="Phrasebook" description=""/><div className="summary-strip"><div><b>{Et}</b><span>REVIEWED</span></div><div><b>{Dt}</b><span>3 CORRECT REVIEWS</span></div><div><b>{phrases.length}</b><span>TOTAL PHRASES</span></div></div><div className="filter-row">{[`All`, `Lambing`, `Barkada`, `Family`, `Pop culture`, `Matchday`].map((e3) => <button key={e3} onClick={() => setFilter(e3)} className={filter === e3 ? `filter active` : `filter`}>{e3 === `Pop culture` ? `TV & pop culture` : e3 === `Barkada` ? `Group chat` : e3}</button>)}</div><div className="phrase-grid">{phrases.filter((e3) => filter === `All` || e3.category === filter).map((e3) => <button key={e3.id} className="phrase-card panel" onClick={() => setDetail(e3)}><div><span className={`category-tag ${e3.category === `Lambing` ? `pink` : ``}`}>{e3.category}</span>{state.reviews[e3.id] ? <span className="phrase-status"><Check size={13}/>{` `}{state.reviews[e3.id].streak >= 3 ? `Practiced` : `Reviewed`}</span> : <span className="phrase-status muted">New</span>}</div><span className="phrase-level">{exerciseDifficulty(e3, `meaning`).difficulty}</span><h3>{e3.phrase}</h3><p>{e3.meaning}</p><footer><span><Volume2 size={13}/>{e3.audio ? `Shelomi’s recording` : `Device voice`}</span><ArrowUpRight size={17}/></footer></button>)}</div></>}{view === `locker` && <><PageTitle eyebrow="KITS" title="Locker room" description="Unlock kits with XP."/><div className="locker-header panel"><Jersey kit={state.kit} size={130}/><div><span className="eyebrow">{`HYUNG · #07`}</span><h2>{state.club}</h2><p>{state.xp}{` career XP · `}{state.kit.charAt(0).toUpperCase() + state.kit.slice(1)}{` kit equipped`}</p></div><span className="outlined-tag">{`DIVISION `}{state.division}</span></div><div className="kit-grid">{[{ id: `lime`, name: `Home`, xp: 0, desc: `Green home kit.` }, { id: `blue`, name: `Away`, xp: 150, desc: `Blue away kit.` }, { id: `rose`, name: `Pink`, xp: 300, desc: `Pink alternate kit.` }, { id: `gold`, name: `Gold`, xp: 600, desc: `Gold kit.` }].map((t3) => <div key={t3.id} className={`kit-card panel ${state.kit === t3.id ? `equipped` : ``}`}><span className="eyebrow">{t3.xp === 0 ? `STARTER KIT` : `${t3.xp} XP UNLOCK`}</span><Jersey kit={t3.id} size={170}/><h3>{t3.name}</h3><p>{t3.desc}</p><button className={state.kit === t3.id ? `secondary-button` : `primary-button`} disabled={!snap || busy || state.xp < t3.xp || state.kit === t3.id} onClick={async () => {
+        if (!W.current) {
+            W.current = true, setBusy(true);
+            try {
+                await action(`kit`, { kit: t3.id }), notify(`Kit equipped.`);
+            }
+            catch (e3) {
+                setError(e3.message);
+            }
+            finally {
+                W.current = false, setBusy(false);
+            }
+        }
+    }}>{state.kit === t3.id ? <><Check size={15}/>Equipped</> : state.xp < t3.xp ? <><LockKeyhole size={14}/>{t3.xp - state.xp}{` XP to go`}</> : <>Equip kit<ArrowRight size={15}/></>}</button></div>)}</div></>}{view === `studio` && <><PageTitle eyebrow="LESSONS" title="Shelomi’s studio" description="Add phrases, context, and voice recordings."/><div className="studio-banner panel"><div className="studio-heart"><PixelHeart size={35}/></div><div><h2>Add a lesson.</h2><p>Record an existing phrase or add a new one.</p></div><button className="primary-button" onClick={() => setEditing(`new`)} disabled={!snap}><Plus size={17}/>Add a phrase</button></div><div className="studio-columns"><section className="panel studio-list"><div className="panel-heading"><h2>Your lesson collection</h2><span className="eyebrow">{phrases.length}{` PHRASES`}</span></div>{phrases.map((e3) => <div key={e3.id} className="studio-row"><div className={`studio-phrase-icon ${e3.audio ? `recorded` : ``}`}><Volume2 size={17}/></div><div><b>{e3.phrase}</b><span>{e3.category}{` · `}{e3.audio ? `Voice added` : `No recording`}</span></div><button className="small-button" onClick={() => setEditing(e3)}>{e3.audio ? `Edit voice` : `Add voice`}<Plus size={12}/></button></div>)}</section><aside><div className="panel studio-tip"><Headphones size={24}/><h3>Voice recordings</h3><p>Record the phrase, then explain its meaning and when to use it.</p><p>Default audio uses a Filipino device voice when available. Your recording replaces it.</p></div><div className="panel studio-tip"><BookOpen size={23}/><h3>Hyung’s progress</h3><p>{Et}{` phrases reviewed.`}<br />{Dt}{` recalled correctly at least three times in a row.`}</p><div className="progress-track"><span style={{ width: `${Et / phrases.length * 100}%` }}/></div></div><div className="panel studio-tip"><Heart size={23}/><h3>Invite Hyung</h3><p>An invite connects Hyung to this career as a learner. He also needs access to the app.</p><button className="secondary-button" onClick={async () => {
+        if (snap?.invite)
+            try {
+                await navigator.clipboard.writeText(`${location.origin}/?join=${snap.invite}`), notify(`Career invite copied.`);
+            }
+            catch {
+                notify(`Clipboard unavailable. Try again in a browser tab.`);
+            }
+    }}><Copy size={14}/>Copy career invite</button></div></aside></div></>}</main><div className="mobile-nav">{[[`career`, House, `Career`], [`phrasebook`, BookOpen, `Phrases`], [`locker`, Shirt, `Kits`], ...snap?.role === `owner` ? [[`studio`, Heart, `Studio`]] : []].map(([e3, t3, r3]) => <button key={String(e3)} className={view === e3 ? `active` : ``} onClick={() => changeView(e3)}>{createElement(t3, { size: 19 })}<span>{r3}</span></button>)}</div></div>}{lessonOpen && pending && phrase && quiz && <div className="modal-backdrop lesson-backdrop"><section className={`lesson-modal quiz-v3 ${pending.solved ? `lesson-reviewed` : ``}`} ref={lessonRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="lesson-title"><div className="lesson-header"><div><PixelHeart size={21}/><span>TAGALOG CHECKPOINT</span></div><span className="auto-paused"><Pause size={12}/>{auto ? `AUTO PAUSED` : `CAREER PAUSED`}</span><button className="icon-button" aria-label="Save and leave conversation" onClick={() => {
+        setAuto(false), setView(`phrasebook`);
+    }}><X size={19}/></button></div><div className="lesson-columns"><div className="lesson-context"><span className="eyebrow">{phrase.category.toUpperCase()}{` · `}{exerciseDifficulty(phrase, pending.mode).difficulty.toUpperCase()}{` · `}{pending.first ? `NEW` : `REVIEW`}</span>{!pending.solved && pending.training && <div className="training-stakes"><b>{pending.training.label.toUpperCase()}{` · `}{pending.training.difficulty.toUpperCase()}</b><span>{`Rolled `}{pending.training.base}/100</span><p>{pending.training.delta === void 0 ? `First try: +${pending.training.gain} points · mistake: −${pending.training.penalty} points once.` : `${pending.training.delta >= 0 ? `+` : ``}${pending.training.delta} ${pending.training.label} points · now ${profile?.stats.find((e3) => e3.key === pending.training.key)?.value}/100`}</p><small>{pending.training.delta === void 0 ? `Stat stays between 10 and 100.` : `Training scored. Further practice won’t change this stat.`}</small></div>}{pending.solved ? <WordReview key={pending.id} phrase={phrase}/> : <h2 id="lesson-title">{quiz.title}</h2>}<button className="audio-button" onClick={() => wt(phrase)} disabled={audioActive}><Volume2 size={18}/>{audioActive ? `Playing…` : `Listen`}</button>{!pending.solved && <small>{phrase.audio ? `SHELOMI’S RECORDING` : `DEVICE VOICE IF AVAILABLE`}</small>}</div><div className="lesson-challenge">{pending.solved ? <div className="success-view"><div className="review-reward"><Check size={18}/><strong>Tama!</strong><span>+{pending.earned}{` XP`}</span>{pending.training && <span>{pending.training.label}{` `}{pending.training.base}{` → `}{profile?.stats.find((e3) => e3.key === pending.training.key)?.value}/100</span>}</div><button className="primary-button" onClick={() => xt()} disabled={answerBusy}>CONTINUE<ArrowRight size={18}/></button>{auto && <button className="text-button countdown" onClick={() => setFeedbackHold(!feedbackHold)}>{feedbackHold ? `Auto-continue paused` : `Continuing in ${countdown}s · tap to pause`}</button>}</div> : <><span className="eyebrow">YOUR ANSWER</span><h3>{quiz.prompt}</h3>{pending.mode === `build` ? <><div className="tile-answer">{tiles.length ? tiles.map((e3, t3) => <button key={t3} onClick={() => setTiles(tiles.filter((e4, n3) => n3 !== t3))}>{pending.options[e3]}</button>) : <span>Tap words in order</span>}</div><div className="word-tiles">{pending.options.map((e3, t3) => <button key={t3} disabled={tiles.includes(t3)} onClick={() => setTiles([...tiles, t3])}>{e3}</button>)}</div><button className="primary-button" disabled={answerBusy || !tiles.length} onClick={() => Ct(tiles.map((e3) => pending.options[e3]).join(` `))}>CHECK ANSWER<ArrowRight size={18}/></button></> : <div className="answer-options">{pending.options.map((e3, t3) => <button key={t3} disabled={answerBusy} onClick={() => Ct(e3)}><span>{String.fromCharCode(65 + t3)}</span>{e3}<ChevronRight size={17}/></button>)}</div>}{pending.feedback && <p className="answer-feedback" role="status">{pending.feedback}</p>}<div className="lesson-reassurance">First try: +{quizRewards(phrase, pending.mode).win}{` XP · first mistake: −`}{quizRewards(phrase, pending.mode).loss}{` XP once · retry: +`}{quizRewards(phrase, pending.mode).retry}{` XP. XP never falls below 0.`}</div></>}</div></div></section></div>}{detail && <Modal title="Phrase details" onClose={() => {
+        setDetail(null), ct.current?.pause(), window.speechSynthesis?.cancel(), setAudioActive(false);
+    }}><span className="category-tag">{detail.category}</span><h2 className="detail-phrase">{detail.phrase}</h2><p className="detail-meaning">{detail.meaning}</p><button className="audio-button" onClick={() => wt(detail)}><Volume2 size={17}/>Listen<span className="voice-wave">{`▂▄▆▃▅▂`}</span></button><PhraseNotes phrase={detail}/><span className="eyebrow">{detail.audio ? `SHELOMI’S RECORDING` : `FILIPINO DEVICE VOICE, WHEN AVAILABLE`}</span></Modal>}{qe && <Modal title="Start a new career" onClose={() => {
+        busy || H(false);
+    }}><p className="restart-copy">Replace this player and reroll your career. XP, unlocked kits, trophy collection, recordings, and Tagalog progress stay.</p><label className="restart-label">NATIONALITY<select value={Je} onChange={(e3) => Ye(e3.target.value)}><option value="">Spin for a nationality</option>{NATIONALITIES.map((e3) => <option key={e3} value={e3}>{e3}</option>)}</select></label><p className="restart-copy">Choose a country here to guarantee it on the nationality wheel.</p>{error && <p role="alert">{error}</p>}<button className="primary-button" disabled={busy} onClick={() => void St()}>{busy ? `STARTING…` : `START NEW CAREER`}<ArrowRight size={18}/></button><button className="text-button" disabled={busy} onClick={() => H(false)}>Keep playing this career</button></Modal>}{settings && <Modal title="Settings" onClose={() => setSettings(false)}><div className="setting-row"><div><b>Career speed</b><p>Time between automatic spins.</p></div><div className="segmented">{[1, 2].map((e3) => <button key={e3} className={speed === e3 ? `active` : ``} onClick={() => setSpeed(e3)}>{e3}×</button>)}</div></div><div className="setting-row"><div><b>Game sounds</b><p>Wheel ticks and result sounds.</p></div><button className={`auto-toggle ${sound ? `on` : ``}`} role="switch" aria-checked={sound} aria-label="Game sounds" onClick={() => {
+        arcade.unlock(), setSound(!sound);
+    }}><span className="toggle-track"><span /></span></button></div><div className="setting-row"><div><b>Reduce motion</b><p>Resolve spins without the animation.</p></div><button className={`auto-toggle ${reduced ? `on` : ``}`} role="switch" aria-checked={reduced} aria-label="Reduce motion" onClick={() => setReduced(!reduced)}><span className="toggle-track"><span /></span></button></div><p className="settings-note">Your career saves automatically. Auto-spin pauses when you leave the tab and at every conversation.</p></Modal>}{help && <Modal title="How to play" onClose={() => setHelp(false)}><div className="help-steps">{[[`01`, `Spin.`, `Each round asks a football question. The wheel picks the result and updates your career.`], [`02`, `Learn.`, `Every attribute roll has a Tagalog checkpoint. First-try answers add 2–6 stat points by difficulty; a mistake deducts 1–3 once. Checkpoint wheels follow skill moves and each club’s trophies, then a wildcard can add up to 100 XP or deduct up to 60. One- and two-star rolls together have a 50% chance. Quiz XP scales with difficulty, with a one-time penalty for mistakes.`], [`03`, `Continue.`, `The questions build your player, club history, competitions, and final career card. Auto-spin pauses for Tagalog quizzes.`]].map(([e3, t3, n3]) => <div key={e3}><span className="pixel">{e3}</span><div><h3>{t3}</h3><p>{n3}</p></div></div>)}</div><button className="primary-button" onClick={() => setHelp(false)}>Close<ArrowRight size={15}/></button></Modal>}{editing && <PhraseEditor phrase={editing === `new` ? null : editing} onClose={() => setEditing(null)} onSave={async () => {
+        await load(), setEditing(null), notify(`Phrase saved.`);
+    }}/>}{notice && <div className="toast" role="status"><CircleCheck size={19}/><span>{notice}</span><button aria-label="Dismiss notification" onClick={() => setNotice(``)}><X size={15}/></button></div>}</div>;
 }
 
-function PageTitle({eyebrow,title,description}:{eyebrow:string;title:string;description:string}){return <div className="page-title"><div className="eyebrow"><span className="live-square"/>{eyebrow}</div><h1 className="pixel">{title}</h1><p>{description}</p></div>}
-function EventCard({event:e,latest}:{event:CareerEvent;latest?:boolean}){const Icon=ICONS[e.kind];const color=WHEEL.find(w=>w.key===e.kind)?.color;return <article className={`event-card panel ${latest?'latest':''}`}><div className="event-meta"><span style={{color}}><Icon size={13}/>{labels[e.kind]}</span><span>S{pad(e.season)} · DAY {pad(e.day)}</span></div><h3>{e.title}</h3><p>{e.detail}</p><footer><span style={{color}}>{e.reward}</span>{latest&&<span className="latest-tag">LATEST</span>}</footer></article>}
-function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){
-  const ref=useRef<HTMLDivElement>(null);
-  useEffect(()=>{const prev=document.activeElement as HTMLElement;ref.current?.focus();const key=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose();if(e.key==='Tab'){const items=ref.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input,select,textarea,a[href]');if(!items?.length)return;const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}};document.addEventListener('keydown',key);return()=>{document.removeEventListener('keydown',key);prev?.focus();};},[]);
-  return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}><div className="modal" role="dialog" aria-modal="true" aria-label={title} ref={ref} tabIndex={-1}><div className="modal-heading"><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={21}/></button></div>{children}</div></div>;
-}
-function PhraseEditor({phrase,onClose,onSave}:{phrase:Phrase|null;onClose:()=>void;onSave:()=>Promise<void>}){
-  const [file,setFile]=useState<File|null>(null),[recording,setRecording]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState('');
-  const recorder=useRef<MediaRecorder|null>(null),stream=useRef<MediaStream|null>(null),chunks=useRef<Blob[]>([]),timer=useRef<ReturnType<typeof setTimeout>|null>(null);
-  useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current);if(recorder.current?.state==='recording')recorder.current.stop();stream.current?.getTracks().forEach(t=>t.stop());},[]);
-  async function record(){if(recording){recorder.current?.stop();return;}try{setError('');if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined')throw new Error('Recording isn’t supported here. Upload an audio file instead.');const s=await navigator.mediaDevices.getUserMedia({audio:true});stream.current=s;const r=new MediaRecorder(s);recorder.current=r;chunks.current=[];r.ondataavailable=e=>{if(e.data.size)chunks.current.push(e.data);};r.onstop=()=>{const mime=r.mimeType||'audio/webm';setFile(new File(chunks.current,'voice-recording.'+(mime.includes('mp4')?'m4a':'webm'),{type:mime}));setRecording(false);s.getTracks().forEach(t=>t.stop());if(timer.current)clearTimeout(timer.current);};r.start();setRecording(true);timer.current=setTimeout(()=>r.stop(),30_000);}catch(e){setError((e as Error).name==='NotAllowedError'?'Microphone permission wasn’t granted. You can upload a recording instead.':(e as Error).message);}}
-  async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();if(recording)return;setSaving(true);setError('');const data=new FormData(e.currentTarget);if(file)data.set('audio',file);if(phrase){if(CATALOG.some(p=>p.id===phrase.id)){data.set('source',phrase.id);data.set('category',phrase.category);}else data.set('id',phrase.id);}try{const r=await fetch('/api/phrases',{method:'POST',body:data});const d=await r.json() as {error?:string};if(!r.ok)throw new Error(d.error);await onSave();}catch(e){setError((e as Error).message);}finally{setSaving(false);}}
-  return <Modal title={phrase?'Add your voice':'A new phrase for Chris'} onClose={onClose}><form className="phrase-form" onSubmit={submit}><label>Tagalog phrase<input name="phrase" required maxLength={180} defaultValue={phrase?.phrase} readOnly={!!phrase&&CATALOG.some(p=>p.id===phrase.id)} placeholder="Lambingin mo ako."/></label><label>What it means<input name="meaning" required maxLength={240} defaultValue={phrase?.meaning} readOnly={!!phrase&&CATALOG.some(p=>p.id===phrase.id)} placeholder="Give me some affection."/></label><label>When would you say it?<textarea name="context" required maxLength={1400} rows={3} defaultValue={phrase?.context} placeholder="The context Chris needs to understand the moment."/></label><label>Category<select name="category" disabled={!!phrase&&CATALOG.some(p=>p.id===phrase.id)} defaultValue={phrase?.category||'Lambing'}>{['Lambing','Barkada','Family','Pop culture','Matchday'].map(c=><option key={c}>{c}</option>)}</select></label><div className="record-box"><div><b>Your voice, optional.</b><span>A short recording · up to 30 seconds</span></div><div className="record-actions"><button type="button" className={`secondary-button ${recording?'recording':''}`} onClick={record}>{recording?<><span className="record-dot"/>Stop recording</>:<><Mic size={15}/>Record</>}</button><label className="upload-label"><Upload size={15}/>Upload<input type="file" accept="audio/*" onChange={e=>{setFile(e.target.files?.[0]||null);}}/></label></div>{file&&<small><Check size={13}/>{file.name} · {Math.round(file.size/1024)} KB</small>}</div>{error&&<p className="form-error" role="alert">{error}</p>}<button className="primary-button" type="submit" disabled={saving||recording}>{saving?<LoaderCircle size={16} className="loading"/>:<Check size={16}/>} {saving?'Saving…':'Save phrase'}</button></form></Modal>;
+function PageTitle({ eyebrow: e2, title: t2, description: n2 }) {
+    return <div className="page-title"><div className="eyebrow"><span className="live-square"/>{e2}</div><h1 className="pixel">{t2}</h1>{n2 && <p>{n2}</p>}</div>;
 }
 
-function questionGroup(id:string){if(/^intl/.test(id))return 'INTERNATIONAL';if(/^(boot|ballon|toty|pots|goal|assist)/.test(id))return 'CAREER TOTALS';if(/^(lg|tm|yr|lt|dc|eu|imp|fam)/.test(id))return 'CLUB CAREER';return 'BUILD YOUR PLAYER';}
-function Counter({target,animate,duration}:{target:number;animate:boolean;duration:number}){
- const [value,setValue]=useState(0);
- useEffect(()=>{let frame=0,start=0;if(!target){setValue(0);return;}function draw(t:number){if(!start)start=t;const progress=animate?Math.min(1,(t-start)/duration):1;setValue(Math.round(target*(1-Math.pow(1-progress,3))));if(progress<1)frame=requestAnimationFrame(draw);}frame=requestAnimationFrame(draw);return()=>cancelAnimationFrame(frame);},[target,animate,duration]);
- return <div className="counter-stage"><span className="eyebrow">CAREER TOTAL</span><strong className="pixel">{value.toLocaleString()}</strong><span>{animate?'ROLLING…':target?'FINAL TOTAL':'READY TO ROLL'}</span></div>;
+function EventCard({ event: e2, latest: t2 }) {
+    let n2 = ICONS[e2.kind], r2 = WHEEL.find((t3) => t3.key === e2.kind)?.color;
+    return <article className={`event-card panel ${t2 ? `latest` : ``}`}><div className="event-meta"><span style={{ color: r2 }}>{createElement(n2, { size: 13 })}{labels[e2.kind]}</span><span>S{pad(e2.season)}{` · DAY `}{pad(e2.day)}</span></div><h3>{e2.title}</h3><p>{e2.detail}</p><footer><span style={{ color: r2 }}>{e2.reward}</span>{t2 && <span className="latest-tag">LATEST</span>}</footer></article>;
+}
+
+function Modal({ title: e2, onClose: t2, children: n2 }) {
+    let r2 = useRef(null);
+    return useEffect(() => {
+        let e3 = document.activeElement;
+        r2.current?.focus();
+        let n3 = (e4) => {
+            if (e4.key === `Escape` && t2(), e4.key === `Tab`) {
+                let t3 = r2.current?.querySelectorAll(`button:not(:disabled),input,select,textarea,a[href]`);
+                if (!t3?.length)
+                    return;
+                let n4 = t3[0], i2 = t3[t3.length - 1];
+                e4.shiftKey && document.activeElement === n4 ? (e4.preventDefault(), i2.focus()) : !e4.shiftKey && document.activeElement === i2 && (e4.preventDefault(), n4.focus());
+            }
+        };
+        return document.addEventListener(`keydown`, n3), () => {
+            document.removeEventListener(`keydown`, n3), e3?.focus();
+        };
+    }, []), <div className="modal-backdrop" onMouseDown={(e3) => {
+        e3.target === e3.currentTarget && t2();
+    }}><div className="modal" role="dialog" aria-modal="true" aria-label={e2} ref={r2} tabIndex={-1}><div className="modal-heading"><h2>{e2}</h2><button className="icon-button" aria-label="Close dialog" onClick={t2}><X size={21}/></button></div>{n2}</div></div>;
+}
+
+function PhraseEditor({ phrase: e2, onClose: t2, onSave: n2 }) {
+    let [r2, i2] = useState(null), [a2, o2] = useState(false), [s2, c2] = useState(false), [u2, d2] = useState(``), f2 = useRef(null), p2 = useRef(null), m2 = useRef([]), h2 = useRef(null);
+    useEffect(() => () => {
+        h2.current && clearTimeout(h2.current), f2.current?.state === `recording` && f2.current.stop(), p2.current?.getTracks().forEach((e3) => e3.stop());
+    }, []);
+    async function ee2() {
+        if (a2) {
+            f2.current?.stop();
+            return;
+        }
+        try {
+            if (d2(``), !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder > `u`)
+                throw Error(`Recording isn’t supported here. Upload an audio file instead.`);
+            let e3 = await navigator.mediaDevices.getUserMedia({ audio: true });
+            p2.current = e3;
+            let t3 = new MediaRecorder(e3);
+            f2.current = t3, m2.current = [], t3.ondataavailable = (e4) => {
+                e4.data.size && m2.current.push(e4.data);
+            }, t3.onstop = () => {
+                let n3 = t3.mimeType || `audio/webm`;
+                i2(new File(m2.current, `voice-recording.` + (n3.includes(`mp4`) ? `m4a` : `webm`), { type: n3 })), o2(false), e3.getTracks().forEach((e4) => e4.stop()), h2.current && clearTimeout(h2.current);
+            }, t3.start(), o2(true), h2.current = setTimeout(() => t3.stop(), 3e4);
+        }
+        catch (e3) {
+            d2(e3.name === `NotAllowedError` ? `Microphone permission wasn’t granted. You can upload a recording instead.` : e3.message);
+        }
+    }
+    async function te2(t3) {
+        if (t3.preventDefault(), a2)
+            return;
+        c2(true), d2(``);
+        let i3 = new FormData(t3.currentTarget);
+        r2 && i3.set(`audio`, r2), e2 && (CATALOG.some((t4) => t4.id === e2.id) ? (i3.set(`source`, e2.id), i3.set(`category`, e2.category)) : i3.set(`id`, e2.id));
+        try {
+            let e3 = await fetch(`/api/phrases`, { method: `POST`, body: i3 }), t4 = await e3.json();
+            if (!e3.ok)
+                throw Error(t4.error);
+            await n2();
+        }
+        catch (e3) {
+            d2(e3.message);
+        }
+        finally {
+            c2(false);
+        }
+    }
+    return <Modal title={e2 ? `Add your voice` : `A new phrase for Hyung`} onClose={t2}><form className="phrase-form" onSubmit={te2}><label>Tagalog phrase<input name="phrase" required={true} maxLength={180} defaultValue={e2?.phrase} readOnly={!!e2 && CATALOG.some((t3) => t3.id === e2.id)} placeholder="Lambingin mo ako."/></label><label>What it means<input name="meaning" required={true} maxLength={240} defaultValue={e2?.meaning} readOnly={!!e2 && CATALOG.some((t3) => t3.id === e2.id)} placeholder="Give me some affection."/></label><label>When would you say it?<textarea name="context" required={true} maxLength={1400} rows={3} defaultValue={e2?.context} placeholder="The context Hyung needs to understand the moment."/></label><label>Category<select name="category" disabled={!!e2 && CATALOG.some((t3) => t3.id === e2.id)} defaultValue={e2?.category || `Lambing`}>{[`Lambing`, `Barkada`, `Family`, `Pop culture`, `Matchday`].map((e3) => <option key={e3}>{e3}</option>)}</select></label><div className="record-box"><div><b>Your voice, optional.</b><span>A short recording · up to 30 seconds</span></div><div className="record-actions"><button type="button" className={`secondary-button ${a2 ? `recording` : ``}`} onClick={ee2}>{a2 ? <><span className="record-dot"/>Stop recording</> : <><Mic size={15}/>Record</>}</button><label className="upload-label"><Upload size={15}/>Upload<input type="file" accept="audio/*" onChange={(e3) => {
+        i2(e3.target.files?.[0] || null);
+    }}/></label></div>{r2 && <small><Check size={13}/>{r2.name}{` · `}{Math.round(r2.size / 1024)}{` KB`}</small>}</div>{u2 && <p className="form-error" role="alert">{u2}</p>}<button className="primary-button" type="submit" disabled={s2 || a2}>{s2 ? <LoaderCircle size={16} className="loading"/> : <Check size={16}/>}{` `}{s2 ? `Saving…` : `Save phrase`}</button></form></Modal>;
+}
+
+function questionGroup(e2) {
+    return /^intl/.test(e2) ? `INTERNATIONAL` : /^(boot|ballon|toty|pots|goal|assist)/.test(e2) ? `CAREER TOTALS` : /^(lg|tm|yr|lt|dc|eu|imp|fam)/.test(e2) ? `CLUB CAREER` : `BUILD YOUR PLAYER`;
+}
+
+function Counter({ target: e2, animate: t2, duration: n2 }) {
+    let [r2, i2] = useState(0);
+    return useEffect(() => {
+        let r3 = 0, a2 = 0;
+        if (!e2) {
+            i2(0);
+            return;
+        }
+        function o2(s2) {
+            a2 ||= s2;
+            let c2 = t2 ? Math.min(1, (s2 - a2) / n2) : 1;
+            i2(Math.round(e2 * (1 - (1 - c2) ** 3))), c2 < 1 && (r3 = requestAnimationFrame(o2));
+        }
+        return r3 = requestAnimationFrame(o2), () => cancelAnimationFrame(r3);
+    }, [e2, t2, n2]), <div className="counter-stage"><span className="eyebrow">CAREER TOTAL</span><strong className="pixel">{r2.toLocaleString()}</strong><span>{t2 ? `ROLLING…` : `READY TO ROLL`}</span></div>;
+}
+
+function PhraseNotes({ phrase: e2 }) {
+    let t2 = PHRASE_GUIDE[e2.id], n2 = t2?.parts || e2.phrase.split(/\s+/).map((e3) => ({ word: e3, meaning: `` }));
+    return <section className="phrase-breakdown" aria-label="Phrase breakdown"><h3>1. Follow the word order</h3><p className="breakdown-caption">Read left to right. These are meaning notes, not a literal English sentence.</p><ol className="word-map">{n2.map((e3, t3) => <li key={t3}><small>{t3 + 1}</small><b>{e3.word}</b>{e3.meaning && <span>{e3.meaning}</span>}</li>)}</ol><h3>2. Why it works</h3><p>{t2?.why || e2.context}</p>{t2 && <><h3>3. In a conversation</h3><p className="taglish-example">{t2.taglish}</p><small>Casual Taglish. Wording varies by person and situation.</small>{t2.pattern && <div className="pattern-practice"><h3>4. Use the same pattern</h3><p className="sentence-pattern">{t2.pattern}</p><p>Keep the pattern. Swap in a word you already know.</p><ul>{t2.swaps?.map((e3) => <li key={e3}>{e3}</li>)}</ul></div>}</>}</section>;
+}
+
+function WordReview({ phrase: e2 }) {
+    let [t2, n2] = useState(0), r2 = e2.phrase.trim().split(/\s+/), i2 = PHRASE_GUIDE[e2.id], a2 = e2.id === `taglish-agree` ? AGREE_EXAMPLES[t2] : void 0, o2 = i2?.parts[t2], s2 = (e3) => `hsl(${(39 + e3 * 137.5) % 360} 80% 78%)`;
+    return <div className="word-review"><h2 id="lesson-title" className="review-accessible-title">{e2.phrase}</h2><p className="review-instruction">Tap a word to see how it’s used.</p><div className="review-words" role="group" aria-label="Words in sentence order">{r2.map((e3, r3) => <button key={r3} type="button" aria-pressed={t2 === r3} aria-controls="word-use" style={{ color: s2(r3) }} onClick={() => n2(r3)}><b>{e3}</b>{i2?.parts[r3] && <small>{i2.parts[r3].meaning}</small>}</button>)}</div><p className="review-translation" data-testid="quiz-meaning">{e2.meaning}</p><div id="word-use" aria-live="polite" className="word-use"><h3 style={{ color: s2(t2) }}>{o2?.word ?? r2[t2]}</h3><p>{a2?.[0] ?? o2?.meaning ?? e2.context}</p><blockquote>{a2?.[1] ?? i2?.taglish ?? e2.phrase}</blockquote>{a2 && <small>{a2[2]}</small>}</div><details className="review-order"><summary>{`Word order & practice`}</summary><p>{i2?.why ?? e2.context}</p>{i2?.pattern && <><b>{i2.pattern}</b><ul>{i2.swaps?.map((e3) => <li key={e3}>{e3}</li>)}</ul></>}</details></div>;
 }

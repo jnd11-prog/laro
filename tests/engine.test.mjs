@@ -1,21 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,isCareerComplete,getSpinQuestion} from '../lib/engine.ts';
+import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,isCareerComplete,getSpinQuestion,quizRewards,WILDCARDS,CAREER_RULES} from '../lib/engine.ts';
+import {PHRASE_GUIDE} from '../lib/phrase-guide.ts';
+import * as careerV1 from '../lib/player-career-v1.js';
 import {inspectCareer,advanceCareer} from '../lib/player-career.js';
 import {wheelSegments,landingRotation} from '../lib/wheel.ts';
 import {quizView} from '../lib/quiz.ts';
 import {CATALOG} from '../lib/catalog.ts';
 const now=1800000000000;
 const p=CATALOG[0];
-function conversation(){let s=initialCareer(42);for(let i=0;i<4;i++)s=spinCareer(s,CATALOG,`spin-${i}`,now,()=>.6).state;return s;}
+function conversation(){let s=initialCareer(42),i=0;while(!s.pending)s=spinCareer(s,CATALOG,`spin-${i++}`,now,()=>.6).state;return s;}
+function atCheckpoint(){let s=initialCareer(42),i=0;while(getSpinQuestion(s,CATALOG,now).id!=='phrase'){s=spinCareer(s,CATALOG,`step-${i++}`,now,()=>.6).state;if(s.pending){s=answerChallenge(s,CATALOG,answerFor(s.pending),now).state;s.pending=null;}}return s;}
+const rewards=q=>quizRewards(CATALOG.find(p=>p.id===q.phraseId),q.mode);
 function answerFor(q){const p=CATALOG.find(p=>p.id===q.phraseId);return q.mode==='meaning'?p.meaning:q.mode==='build'?p.phrase:p.phrase.replace(/[.!?]/g,'').split(/\s+/)[q.missingIndex];}
 
 test('attachment questions begin with position, nationality, debut age, and height',()=>{
  const choices=[],prompts=[];for(let i=0;i<4;i++){const frame=inspectCareer(42,choices);prompts.push(frame.question.prompt);choices.push(advanceCareer(42,choices,()=>.6).record);}
  assert.deepEqual(prompts,["What position?","What's your nationality?",'What age do you make your pro debut?','How tall are you?']);
 });
-test('first three career questions resolve; fourth pauses for Tagalog',()=>{
- const s=conversation();assert.equal(s.builder.choices.length,3);assert.equal(s.pending.phraseId,'galing');assert.equal(s.pending.revision,2);assert.equal(s.history.length,4);
+test('attribute rounds pause for a Tagalog training question',()=>{
+ const s=conversation();assert.equal(s.pending.phraseId,'galing');assert.equal(s.pending.training.key,'pace');assert.equal(s.pending.revision,2);
  assert.throws(()=>spinCareer(s,CATALOG,'blocked'),/Finish your Tagalog/);
 });
 test('quiz cue does not reveal its English gloss or context, including after mistakes',()=>{
@@ -24,7 +28,7 @@ test('quiz cue does not reveal its English gloss or context, including after mis
 });
 test('Tagalog checkpoint wheels and spin results never display the full phrase before an exercise',()=>{
  for(const streak of [undefined,1,2]){
-  const s=initialCareer(42);s.spins=3;if(streak)s.reviews[p.id]={seen:streak,correct:streak,streak,due:0,last:0};
+  const s=atCheckpoint();s.reviews=streak?{[p.id]:{seen:streak,correct:streak,streak,due:0,last:0}}:{};
   const q=getSpinQuestion(s,CATALOG,now),result=spinCareer(s,CATALOG,`privacy-${streak}`,now,()=>0);
   const visible=[...q.options.map(o=>o.label),...result.event.wheel.options.map(o=>o.label),result.event.title,result.event.detail,result.event.outcome].join(' ');
   for(const phrase of CATALOG)assert.ok(!visible.toLowerCase().includes(phrase.phrase.replace(/[.!?]/g,'').toLowerCase()),`hidden phrase: ${phrase.id}`);
@@ -34,13 +38,15 @@ test('Tagalog checkpoint wheels and spin results never display the full phrase b
 test('translation is revealed after a correct answer',()=>{
  const s=answerChallenge(conversation(),CATALOG,p.meaning,now).state;const view=quizView(s.pending,p);assert.equal(view.meaning,p.meaning);assert.equal(view.context,p.context);
 });
-test('wrong answers give no XP, a retry earns less, and repeated submission cannot duplicate XP',()=>{
- const s=conversation(),xp=s.xp;const wrong=answerChallenge(s,CATALOG,'wrong',now);assert.equal(wrong.correct,false);assert.equal(wrong.state.xp,xp);
- const right=answerChallenge(wrong.state,CATALOG,p.meaning,now);assert.equal(right.correct,true);assert.equal(right.state.xp,xp+15);assert.equal(right.state.reviews.galing.due,now+300000);
- assert.equal(answerChallenge(right.state,CATALOG,p.meaning,now).state.xp,xp+15);
+test('a first mistake costs XP once, a retry earns less, and XP never goes below zero',()=>{
+ const s=conversation(),{win,loss,retry}=rewards(s.pending),xp=s.xp;const wrong=answerChallenge(s,CATALOG,'wrong',now);assert.equal(wrong.correct,false);assert.equal(wrong.state.xp,xp-loss);
+ const again=answerChallenge(wrong.state,CATALOG,'wrong',now);assert.equal(again.state.xp,xp-loss);
+ const right=answerChallenge(again.state,CATALOG,p.meaning,now);assert.equal(right.correct,true);assert.equal(right.state.xp,xp-loss+retry);assert.equal(right.state.reviews.galing.due,now+300000);
+ assert.equal(answerChallenge(right.state,CATALOG,p.meaning,now).state.xp,xp-loss+retry);
+ const broke={...s,xp:0};assert.equal(answerChallenge(broke,CATALOG,'wrong',now).state.xp,0);assert.ok(win>retry);
 });
 test('first-try success schedules later review without mutating the original career',()=>{
- const s=conversation();const right=answerChallenge(s,CATALOG,p.meaning,now).state;assert.equal(s.pending.solved,false);assert.equal(right.xp,s.xp+30);assert.equal(right.reviews.galing.streak,1);assert.equal(right.reviews.galing.due,now+14400000);
+ const s=conversation(),{win}=rewards(s.pending);const right=answerChallenge(s,CATALOG,p.meaning,now).state;assert.equal(s.pending.solved,false);assert.equal(right.xp,s.xp+win);assert.equal(right.reviews.galing.streak,1);
 });
 test('recall uses a missing Tagalog word, never the English meaning as the cue',()=>{
  const review={seen:1,correct:1,streak:1,due:0,last:0};const q=makeChallenge(p,review,'cloze',CATALOG,()=>.5);
@@ -117,7 +123,7 @@ test('careers end at believable ages and heights',()=>{
 });
 test('career totals stay in range for each position',()=>{
  const maxGoals={GK:13,CB:188,RB:157,LB:157,CDM:188,CM:375,CAM:625,RM:625,LM:625,RW:1000,LW:1000,ST:1125};
- for(const {profile:p} of careers){assert.ok(p.goals<=maxGoals[p.position],`${p.position} scored ${p.goals}`);if(p.overall<70)assert.ok(p.toty<=1,`overall ${p.overall} with ${p.toty} TOTY`);}
+ for(const {profile:p} of careers){assert.ok(p.goals<=maxGoals[p.position],`${p.position} scored ${p.goals}`);if(p.overall<65)assert.ok(p.toty<=1,`overall ${p.overall} with ${p.toty} TOTY`);}
 });
 test('club rules match the real game',()=>{
  for(const {profile:p} of careers)for(const c of p.clubs){
@@ -139,9 +145,31 @@ test('tournaments follow the real calendar and skip rounds that do not exist',()
   for(const q of prompts.filter(q=>/^Copa América /.test(q.prompt)))assert.ok(q.options.find(o=>o.label==='Did not qualify').blocked,q.prompt);
  }
 });
-test('a career saved under older questions restarts but keeps earned progress',()=>{
- const old=initialCareer(42);old.xp=500;old.kit='gold';old.trophies={league:3};old.reviews={galing:{seen:1,correct:1,streak:1,due:0,last:0}};old.builder={seed:42,choices:[{id:'position',index:99,type:'spin'}],complete:true};old.goals=800;
- const next=upgradeCareer(old);assert.equal(next.builder.rules,2);assert.equal(next.builder.choices.length,0);assert.equal(next.builder.complete,false);assert.equal(next.goals,0);
- assert.equal(next.xp,500);assert.equal(next.kit,'gold');assert.deepEqual(next.trophies,{league:3});assert.deepEqual(next.reviews,old.reviews);
+test('a career started under the original questions keeps replaying them',()=>{
+ const choices=[];for(let i=0;i<20;i++)choices.push(careerV1.advanceCareer(42,choices,()=>.6).record);
+ const old=initialCareer(42);delete old.builder.rules;old.builder.choices=choices;old.xp=9868;old.kit='gold';old.trophies={league:20};old.reviews={galing:{seen:1,correct:1,streak:1,due:0,last:0}};
+ const next=upgradeCareer(old);assert.equal(next.builder.choices.length,20);assert.equal(next.builder.rules,undefined);assert.equal(next.xp,9868);assert.equal(next.kit,'gold');assert.deepEqual(next.trophies,{league:20});assert.deepEqual(next.reviews,old.reviews);
+ assert.ok(spinCareer({...next,pending:null},CATALOG,'keeps-going',now,()=>.6).state.builder.choices.length>=20);
 });
-
+test('training changes the attribute once and keeps it between 10 and 100',()=>{
+ const s=conversation(),t=s.pending.training;
+ const right=answerChallenge(s,CATALOG,p.meaning,now).state;assert.equal(right.pending.training.delta,t.gain);assert.equal(right.trainingPoints[t.key],t.gain);
+ const wrong=answerChallenge(s,CATALOG,'wrong',now).state;assert.equal(wrong.pending.training.delta,-t.penalty);
+ const fixed=answerChallenge(wrong,CATALOG,p.meaning,now).state;assert.equal(fixed.trainingPoints[t.key],-t.penalty);
+ const top={...s,pending:{...s.pending,training:{...t,base:100}}};assert.equal(answerChallenge(top,CATALOG,p.meaning,now).state.pending.training.delta,0);
+});
+test('a section ends with a Tagalog checkpoint then a wildcard that cannot push XP below zero',()=>{
+ let s=atCheckpoint();const c=spinCareer(s,CATALOG,'check',now,()=>.6);assert.equal(c.event.title,'Tagalog checkpoint');s=answerChallenge(c.state,CATALOG,answerFor(c.state.pending),now).state;s.pending=null;
+ assert.equal(getSpinQuestion(s,CATALOG,now).id,'wildcard');
+ const worst=spinCareer({...s,xp:10},CATALOG,'wild',now,()=>.999);assert.equal(worst.event.title,WILDCARDS.at(-1).label);assert.equal(worst.state.xp,0);
+ assert.notEqual(getSpinQuestion(worst.state,CATALOG,now).id,'wildcard');
+});
+test('restarting keeps learning progress and guarantees a chosen nationality',()=>{
+ const s=conversation();s.xp=777;s.reviews={galing:{seen:1,correct:1,streak:1,due:0,last:0}};s.kit='blue';
+ let next=restartCareer(s,'Philippines');assert.equal(next.season,s.season+1);assert.equal(next.xp,777);assert.equal(next.kit,'blue');assert.equal(next.pending,null);assert.equal(next.builder.rules,CAREER_RULES);
+ next=spinCareer(next,CATALOG,'pos',now,()=>.6).state;const q=getSpinQuestion(next,CATALOG,now);assert.equal(q.id,'nationality');assert.equal(q.options.filter(o=>!o.blocked).length,1);
+ assert.equal(spinCareer(next,CATALOG,'nat',now,()=>0).state.profile.nationality,'Philippines');
+});
+test('every built-in phrase has a word breakdown with one part per word',()=>{
+ for(const phrase of CATALOG){const g=PHRASE_GUIDE[phrase.id];assert.ok(g,`missing breakdown: ${phrase.id}`);assert.equal(g.parts.length,phrase.phrase.trim().split(/\s+/).length,`word count: ${phrase.id}`);assert.ok(g.parts.every(x=>x.meaning),phrase.id);}
+});

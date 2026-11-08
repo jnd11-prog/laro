@@ -11,11 +11,11 @@ const b=await learner('state');await other('state');assert.notEqual(a.data.invit
 let r=await creator('spin',{requestId:'integration-spin-1',version:0});assert.equal(r.status,200);assert.equal(r.data.version,1);
 const replay=await creator('spin',{requestId:'integration-spin-1',version:0});assert.equal(replay.status,200);assert.equal(replay.data.version,1);assert.equal(replay.data.state.xp,r.data.state.xp);
 const race=await Promise.all(['a','b'].map(s=>creator('spin',{requestId:'integration-race-'+s,version:1})));assert.deepEqual(race.map(x=>x.status).sort(),[200,409]);
-let current=(await creator('state')).data;while(current.state.spins<4){const next=await creator('spin',{requestId:crypto.randomUUID(),version:current.version});assert.equal(next.status,200);current=next.data;}
+let current=(await creator('state')).data;while(!current.state.pending){const next=await creator('spin',{requestId:crypto.randomUUID(),version:current.version});assert.equal(next.status,200);current=next.data;}
 const q=current.state.pending;assert.ok(q);const blocked=await creator('spin',{requestId:crypto.randomUUID(),version:current.version});assert.equal(blocked.status,400);
 const early=await creator('continue',{requestId:crypto.randomUUID(),version:current.version});assert.equal(early.status,400);
-const wrong=await creator('answer',{requestId:crypto.randomUUID(),version:current.version,challengeId:q.id,answer:'wrong'});assert.equal(wrong.data.correct,false);assert.equal(wrong.data.state.xp,current.state.xp);current=wrong.data;
-const answerId=crypto.randomUUID();const right=await creator('answer',{requestId:answerId,version:current.version,challengeId:q.id,answer:"You're so good!"});assert.equal(right.data.correct,true);assert.equal(right.data.state.xp,current.state.xp+15);
+const wrong=await creator('answer',{requestId:crypto.randomUUID(),version:current.version,challengeId:q.id,answer:'wrong'});assert.equal(wrong.data.correct,false);assert.equal(wrong.data.state.xp,Math.max(0,current.state.xp-10));current=wrong.data;
+const answerId=crypto.randomUUID();const right=await creator('answer',{requestId:answerId,version:current.version,challengeId:q.id,answer:"You're so good!"});assert.equal(right.data.correct,true);assert.equal(right.data.state.xp,current.state.xp+10);
 const answerReplay=await creator('answer',{requestId:answerId,version:current.version,challengeId:q.id,answer:"You're so good!"});assert.equal(answerReplay.data.state.xp,right.data.state.xp);
 const finish=await creator('continue',{requestId:crypto.randomUUID(),version:right.data.version});assert.equal(finish.data.state.pending,null);
 const upload=new FormData();for(const [k,v]of Object.entries({phrase:'Test phrase.',meaning:'Test meaning.',context:'Integration test only.',category:'Barkada'}))upload.set(k,v);
@@ -33,5 +33,6 @@ assert.equal((await creator('kit','null',true)).status,400);
 assert.equal((await creator('phrases',{not:'a form'})).status,400);
 assert.equal((await creator('kit',{requestId:crypto.randomUUID(),version:saved.version,kit:'lime'},false,{Origin:'null'})).status,403);
 const punctuation=new FormData();for(const [k,v]of Object.entries({phrase:'!!!',meaning:'Nothing.',context:'Integration test only.',category:'Barkada'}))punctuation.set(k,v);assert.equal((await creator('phrases',punctuation,true)).status,400);
-const refreshed=(await learner('state')).data;assert.equal(refreshed.state.spins,4);assert.equal(refreshed.state.pending,null);
+assert.equal((await creator('restart',{requestId:crypto.randomUUID(),version:saved.version,nationality:'Atlantis'})).status,400);
+const refreshed=(await learner('state')).data;assert.equal(refreshed.state.spins,finish.data.state.spins);assert.equal(refreshed.state.pending,null);
 console.log('Integration passed: persistence, duplicate requests, concurrent spins, grading, recovery, uploads, invite roles, audio isolation, locked rewards, and malformed-request handling.');

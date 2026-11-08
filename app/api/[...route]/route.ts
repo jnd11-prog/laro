@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { ApiError, db, getContext, json, snapshot, owner, save, prior, checkVersion, requestId, sameOrigin } from '@/lib/server';
-import { answerChallenge, nextSeason, spinCareer, isCareerComplete } from '@/lib/engine';
+import { answerChallenge, nationalityLabels, nextSeason, restartCareer, spinCareer, isCareerComplete } from '@/lib/engine';
 import { CATALOG } from '@/lib/catalog';
 
 export const dynamic='force-dynamic';
@@ -78,6 +78,10 @@ export async function POST(req:Request){
       const prices:Record<string,number>={lime:0,blue:150,rose:300,gold:600};const kit=String(body.kit);
       if(!Object.hasOwn(prices,kit)||c.state.xp<prices[kit])throw new ApiError(400,'Keep playing to unlock this kit.');
       await save(c,{...c.state,kit},id,{});return json(snapshot(c));
+    }
+    if(path==='/api/restart'){
+      if(body.nationality!==undefined&&(typeof body.nationality!=='string'||!nationalityLabels().includes(body.nationality)))throw new ApiError(400,'Choose a listed nationality.');
+      await save(c,restartCareer(c.state,body.nationality as string|undefined),id,{});return json(snapshot(c));
     }
     if(path==='/api/season'){
       if(!isCareerComplete(c.state)||c.state.pending)throw new ApiError(400,'Finish this career and any open quiz first.');

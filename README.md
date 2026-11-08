@@ -4,11 +4,11 @@ A full-stack Tagalog learning app built around a soccer career simulator. Made f
 
 **Play it:** [laro-fc.jnd11.workers.dev](https://laro-fc.jnd11.workers.dev). No sign-up needed; each browser gets its own guest career.
 
-![The Laro FC career wheel on its first question, “What position?”](docs/career-wheel.png)
+![The Laro FC home screen with the career wheel on its first question](docs/career-wheel.png)
 
 Each round follows the full career builder: position, nationality, debut age, height, career length, attributes, dominant foot, clubs, upgrades, domestic and European competitions, international results, goals, assists, and individual awards. Conditional follow-up questions reflect earlier results. The wheel shows the possible answers and the backend applies the selected result; numeric goal and assist totals use an animated counter. The run ends with a career card rather than an arbitrary spin limit.
 
-Every fourth spin pauses for Tagalog. New phrases start with meaning recognition, successful reviews introduce missing-word recall in Tagalog, and repeated correct reviews unlock word ordering. Checkpoint wheels show categories rather than full phrases. The quiz removes the career screen, wheel, and recent history from the rendered page, and hides the English gloss and usage explanation until the answer is correct, including after mistakes. The phrasebook remains available for studying.
+Each attribute round is followed by a Tagalog training question that can raise or lower that stat, and each section of the career ends with a Tagalog checkpoint and a wildcard that swings XP. New phrases start with meaning recognition, successful reviews introduce missing-word recall in Tagalog, and repeated correct reviews unlock word ordering. Checkpoint wheels show categories rather than full phrases. The quiz removes the career screen, wheel, and recent history from the rendered page, and hides the English gloss and usage explanation until the answer is correct, including after mistakes. The phrasebook remains available for studying.
 
 ## Included
 
@@ -16,7 +16,7 @@ Every fourth spin pauses for Tagalog. New phrases start with meaning recognition
 - Manual spins with an explicit next-question step, auto-spin, two speeds, and reduced motion. Auto-spin pauses for Tagalog and stops at the completed career card.
 - Local Web Audio synthesis: decelerating wheel ticks, result jingles, trophy fanfares, and answer sounds. Sound starts after a user gesture and can be muted.
 - A pixel arcade layout with a 128×128 canvas wheel, self-hosted pixel font, square controls, larger question and result headings, and readable body text. Wheel angles reflect the backend weights; blocked outcomes cannot be selected.
-- Fifteen starter phrases with meanings and usage context, including lambing, family references, and PBB’s Kuya.
+- Eighty-four built-in phrases with meanings, usage context, and tap-a-word breakdowns, including lambing, family references, and PBB’s Kuya.
 - A phrasebook and creator studio with audio recording or file upload.
 - Creator/learner invitations, with server-side role checks and private audio access.
 - Optimistic concurrency checks and idempotent mutations that prevent duplicated rewards.
@@ -45,11 +45,12 @@ An invite grants learner membership in the selected career, not creator permissi
 | Path | What it does |
 | --- | --- |
 | `lib/engine.ts` | Grades exercises, schedules review, awards XP, and connects the career simulator to the game. |
-| `lib/player-career.js` | Replays the seeded career builder and its branching questions. |
+| `lib/catalog.ts`, `lib/phrase-guide.ts` | The phrases and their word-by-word notes. |
+| `lib/player-career.js`, `lib/player-career-v1.js` | The seeded career builder and its branching questions; v1 is a frozen copy for older saves. |
 | `lib/server.ts`, `app/api/[...route]/route.ts` | Identity, membership, atomic saves, and the HTTP API. |
 | `app/game.tsx`, `app/art.tsx` | The game UI, quiz, phrasebook, studio, pixel art, and weighted wheel. |
 
-`components/ui/`, `vendor/`, and most of `scripts/` are framework and hosting scaffolding.
+`components/ui/`, `vendor/`, and most of `scripts/` are framework and hosting scaffolding. `app/game.tsx`, `app/art.tsx`, `app/globals.css`, and `lib/player-career-v1.js` were recovered from a compiled deployment, so their local names are short and the stylesheet is compiled.
 
 ## Local development
 
@@ -103,11 +104,11 @@ LARO_TEST_URL=http://localhost:5173 node tests/integration.mjs
 
 No generated audio is represented as Shelomi's voice. Starter phrases use a Filipino device voice only when one is installed. Real recordings uploaded in the studio take precedence. Microphone recording requires browser permission and a secure context; uploads work without microphone permission.
 
-Review intervals are deliberately transparent: a missed-then-correct phrase returns after five minutes; first-try successes advance through four hours, one day, three days, and seven days. Exercise selection is heuristic. Three consecutive first-try successes is shown as practice progress, not a claim of fluency.
+Scoring depends on difficulty: a first-try answer earns 20, 40, or 60 XP, a first mistake costs 5, 10, or 15 XP once, a retry earns 5, 10, or 15 XP, and XP never falls below zero. Review intervals are deliberately transparent: a missed-then-correct phrase returns after five minutes; first-try successes advance through four hours, one day, three days, and seven days. Exercise selection is heuristic. Three consecutive first-try successes is shown as practice progress, not a claim of fluency.
 
 ## Saved-career compatibility
 
-Careers replay from recorded answers, so the questions are versioned (`CAREER_RULES` in `lib/engine.ts`). A career saved under older questions restarts its builder on the next load. Existing XP, kits, lessons, trophy collections, and history remain intact; no destructive database migration is needed. Attributes and overall rating display as unknown until the corresponding builder questions are resolved. Pending older recall exercises are upgraded to Tagalog cues while preserving their attempt count.
+Careers replay from recorded answers, so the questions are versioned (`CAREER_RULES` in `lib/engine.ts`). A career started under the original questions keeps replaying `lib/player-career-v1.js`; the realism rules apply to careers started afterward. Attributes and overall rating display as unknown until the corresponding builder questions are resolved. Pending older recall exercises are upgraded to Tagalog cues while preserving their attempt count.
 
 ## Next development steps
 

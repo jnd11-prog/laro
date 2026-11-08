@@ -1,6 +1,6 @@
 import type { SpinQuestion } from './types';
 export type CareerChoice = { id:string; index:number; type:'spin'|'roll'; value?:number };
-export type ClubStint = { name:string; league:string; years:number; lt:number; dc:number; euroWon?:string[]; ret?:boolean };
+export type ClubStint = { name:string; league:string; years:number; lt:number; dc:number; euroWon?:string[]; ret?:boolean; cont?:string };
 export type SimProfile = {
   position?:string; nationality?:string; flag?:string; debut?:number; height?:string; seasons?:number; nclubs?:number;
   pace?:number; shooting?:number; dribbling?:number; passing?:number; strength?:number; defending?:number;
@@ -11,9 +11,11 @@ export type SimProfile = {
   intl?:{name:string;year:number;v:number;label:string}[];
   overall:number; retirementAge:number|null; stats:{key:string;label:string;value:number|null}[];
 };
+export type TrainingPoints = Record<string,number>;
 export type CareerFrame = { question:SpinQuestion|null; profile:SimProfile; complete:boolean; automatic:number; choices:number };
-export function inspectCareer(seed:number,records?:CareerChoice[]):CareerFrame;
-export function advanceCareer(seed:number,records?:CareerChoice[],pick?:()=>number): {
+export type CareerAdvance = {
   question:SpinQuestion; index:number; title:string; value?:number; caption:string; record:CareerChoice;
   profile:SimProfile; complete:boolean; next:SpinQuestion|null; automatic:number;
 };
+export function inspectCareer(seed:number,records?:CareerChoice[],trainingPoints?:TrainingPoints):CareerFrame;
+export function advanceCareer(seed:number,records?:CareerChoice[],pick?:()=>number,trainingPoints?:TrainingPoints,forcedIndex?:number):CareerAdvance;
