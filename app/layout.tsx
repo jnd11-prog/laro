@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import InstallApp from "./install-app";
 import "./globals.css";
-import "./night-match.css";
+import "./world.css";
 
 export const metadata: Metadata = {
   title: "Laro FC — Hyung’s career",

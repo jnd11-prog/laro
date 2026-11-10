@@ -24,6 +24,20 @@ export function PixelTrophy({ size: e2 = 24 }) {
 
 export const WHEEL = [{ key: `goal`, label: `GOAL!`, color: `#c5f46d`, ink: `#182915`, symbol: `★` }, { key: `training`, label: `TRAINING`, color: `#72bfff`, ink: `#132941`, symbol: `↗` }, { key: `match`, label: `MATCHDAY`, color: `#b5a0ee`, ink: `#28213d`, symbol: `⚑` }, { key: `transfer`, label: `TRANSFER`, color: `#ffd47d`, ink: `#463616`, symbol: `⇄` }, { key: `message`, label: `SHELOMI`, color: `#f69ab1`, ink: `#492230`, symbol: `♥` }, { key: `rest`, label: `RECOVERY`, color: `#7ed7bf`, ink: `#133e33`, symbol: `✦` }];
 
+// One pixel of the wheel: a riveted gold rim around shaded slices.
+function wheelPixel(radius, edgeDistance, fromStart, span, x, y, color) {
+    const lighten = (c) => c.map((v) => (v + 255) >> 1), darken = (c) => c.map((v) => v * 0.68 | 0), checker = (x + y) % 2 === 0;
+    if (radius > 61.4) return [123, 63, 18];
+    if (radius > 55.5) return (x + y) % 5 ? [255, 217, 94] : [255, 241, 176];
+    if (radius > 53.5) return [168, 98, 22];
+    if (radius < 15) return [42, 36, 85];
+    if (radius < 17) return [27, 21, 51];
+    if (edgeDistance < Math.min(1.6, 42 / radius)) return [27, 21, 51];
+    if (radius > 49.5) return darken(color);
+    if (fromStart < span * 0.16 && checker) return lighten(color);
+    if (fromStart > span * 0.84 && checker) return darken(color);
+    return color;
+}
 export function Wheel({ question: e2, rotation: t2, spinning: n2, onSpin: r2, disabled: i2, reduced: a2, duration: o2 = 2200 }) {
     let s2 = useRef(null), c2 = wheelSegments(e2.options);
     return useEffect(() => {
@@ -36,16 +50,16 @@ export function Wheel({ question: e2, rotation: t2, spinning: n2, onSpin: r2, di
                 let o3 = a3 - 63.5, s3 = t4 - 63.5, c3 = Math.sqrt(o3 * o3 + s3 * s3);
                 if (c3 > 63)
                     continue;
-                let l2 = (Math.atan2(s3, o3) * 180 / Math.PI + 90 + (r3[0]?.offset || 0) + 360) % 360, u2 = r3.find((e3) => l2 < e3.end && e3.span > 0) || r3[r3.length - 1], d2 = Math.min(l2 - u2.start, u2.end - l2), f2 = i3(c3 > 61 ? `#ffc800` : c3 > 59 || c3 < 19 ? `#091321` : c3 < 21 ? `#ffc800` : d2 < 0.7 ? `#132033` : e2.options[u2.index].color), p2 = (t4 * 128 + a3) * 4;
+                let l2 = (Math.atan2(s3, o3) * 180 / Math.PI + 90 + (r3[0]?.offset || 0) + 360) % 360, u2 = r3.find((e3) => l2 < e3.end && e3.span > 0) || r3[r3.length - 1], d2 = Math.min(l2 - u2.start, u2.end - l2), f2 = wheelPixel(c3, d2, l2 - u2.start, u2.span, a3, t4, i3(e2.options[u2.index].color)), p2 = (t4 * 128 + a3) * 4;
                 n3.data[p2] = f2[0], n3.data[p2 + 1] = f2[1], n3.data[p2 + 2] = f2[2], n3.data[p2 + 3] = 255;
             }
-        t3.putImageData(n3, 0, 0), t3.fillStyle = `#b6c9cc`;
-        for (let e3 = 0; e3 < 24; e3++) {
-            let n4 = e3 * 15 * Math.PI / 180;
-            t3.fillRect(Math.round(63 + 61.5 * Math.cos(n4)), Math.round(63 + 61.5 * Math.sin(n4)), 1, 1);
+        t3.putImageData(n3, 0, 0), t3.fillStyle = `#fff7cf`;
+        for (let e3 = 0; e3 < 20; e3++) {
+            let n4 = e3 * 18 * Math.PI / 180;
+            t3.fillRect(Math.round(62.5 + 57.5 * Math.cos(n4)), Math.round(62.5 + 57.5 * Math.sin(n4)), 3, 3);
         }
     }, [e2]), <div className={`wheel-stage ${n2 ? `is-spinning` : ``}`}><svg className="pixel-pointer" width="30" height="24" viewBox="0 0 24 20" shapeRendering="crispEdges" aria-hidden="true"><path d="M0 0h24v4h-4v4h-4v4h-4v4H8v-4H4V8H0Z" fill="#ffe27a"/><path d="M4 0h16v3H4Z" fill="#fff2bf"/></svg><div className="wheel-disc" style={{ transform: `rotate(${t2}deg)`, transitionDuration: a2 ? `0.01s` : `${o2}ms` }}><canvas width="128" height="128" ref={s2} className="pixel-wheel" aria-hidden="true"/><svg viewBox="0 0 400 400" className="wheel-labels" role="img" aria-label={e2.options.filter((e3) => !e3.blocked).map((e3) => e3.label).join(`, `)}>{c2.filter((e3) => e3.span >= 7).map((t3) => {
-        let n3 = e2.options[t3.index], r3 = Math.min(12, Math.max(8, t3.span * 0.35)), i3 = Math.floor(115 / (r3 * 0.62)), a3 = n3.label.length > i3 ? n3.label.slice(0, i3 - 1) + `…` : n3.label;
-        return <text key={n3.id} transform={`rotate(${t3.mid - 90} 200 200)`} x="370" y="200" textAnchor="end" dominantBaseline="central" fontFamily="Laro,monospace" fontSize={r3} fill="#132033">{a3}</text>;
+        let n3 = e2.options[t3.index], r3 = Math.min(24, t3.span * 0.55, Math.max(10, 100 / (n3.label.length * 0.6))), i3 = Math.floor(100 / (r3 * 0.6)), a3 = n3.label.length > i3 ? n3.label.slice(0, i3 - 1) + `…` : n3.label;
+        return <text key={n3.id} transform={`rotate(${t3.mid - 90} 200 200)`} x="352" y="200" textAnchor="end" dominantBaseline="central" fontFamily="Pixelify Sans,monospace" fontSize={r3} fill="#1b1533">{a3}</text>;
     })}</svg></div><button onClick={r2} disabled={i2} className="wheel-center" aria-label="Spin career wheel"><PixelBall size={25}/><span>{n2 ? `...` : `SPIN!`}</span></button></div>;
 }

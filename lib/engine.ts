@@ -65,7 +65,7 @@ export function getSpinQuestion(state:Career,phrases:Phrase[],now=Date.now()):Sp
   const first=!Object.keys(s.reviews).length&&pool.some(p=>p.id==='galing');
   return {id:'phrase',prompt:'Tagalog checkpoint',options:pool.map((p,i)=>({id:p.id,label:p.category,color:COLORS[i],weight:first?Number(p.id==='galing'):phraseWeight(s.reviews[p.id],now),blocked:first&&p.id!=='galing'})),presentation:'wheel',step:frame.question?.step,remaining:frame.question?.remaining};
  }
- if(sectionEnd&&s.checkpointAt===b.choices.length&&s.wildcardAt!==b.choices.length)return {id:'wildcard',prompt:'Wildcard · what happens next?',presentation:'wheel',options:WILDCARDS.map((w,i)=>({id:String(i),label:`${w.label} (${w.xp>0?'+':''}${w.xp} XP)`,weight:w.weight,color:COLORS[i]}))};
+ if(sectionEnd&&s.checkpointAt===b.choices.length&&s.wildcardAt!==b.choices.length)return {id:'wildcard',prompt:'Wildcard · what happens next?',presentation:'wheel',remaining:frame.question?.remaining,options:WILDCARDS.map((w,i)=>({id:String(i),label:`${w.label} (${w.xp>0?'+':''}${w.xp} XP)`,weight:w.weight,color:COLORS[i]}))};
  const question=frame.question!;
  if(question.id==='nationality'&&s.preferredNationality)return {...question,options:question.options.map(o=>({...o,weight:Number(o.label===s.preferredNationality),blocked:o.label!==s.preferredNationality}))};
  return question;

@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,phrasePool,isCareerComplete,getSpinQuestion,quizRewards,WILDCARDS,CAREER_RULES,careerRoundXp} from '../lib/engine.ts';
 import {PHRASE_GUIDE} from '../lib/phrase-guide.ts';
-import {coachLine} from '../lib/coach.ts';
 import * as careerV1 from '../lib/player-career-v1.js';
 import {inspectCareer,advanceCareer} from '../lib/player-career.js';
 import {wheelSegments,landingRotation} from '../lib/wheel.ts';
@@ -211,9 +210,3 @@ test('experienced learners stop drawing the easiest phrases',()=>{
  const s=initialCareer(42);for(const q of CATALOG.slice(0,30))s.reviews[q.id]=review(1);
  const pool=phrasePool(CATALOG,s);assert.ok(pool.length>=30);assert.ok(pool.every(q=>(q.difficulty??q.phrase.split(/\s+/).length>=3?(q.difficulty??2):1)>=2));
 });
-test('Kuya Coach reacts to the moment and repeats the same line on reload',()=>{
- const line=m=>coachLine({spins:0,complete:false,...m});
- assert.match(line({questionId:'wildcard'}),/Batman/);assert.match(line({pending:{solved:true,tries:1}}),/galing/);assert.match(line({pending:{solved:false,tries:1}}),/Sayang/);assert.match(line({pending:{solved:true,tries:2}}),/Rebound/);assert.match(line({result:{awardId:'ucl'}}),/trophy/);assert.match(line({complete:true}),/One more/);
- assert.equal(line({questionId:'position'}),line({questionId:'position'}));
-});
-
