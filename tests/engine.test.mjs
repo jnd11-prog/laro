@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,isCareerComplete,getSpinQuestion,quizRewards,WILDCARDS,CAREER_RULES} from '../lib/engine.ts';
+import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,isCareerComplete,getSpinQuestion,quizRewards,WILDCARDS,CAREER_RULES,careerRoundXp} from '../lib/engine.ts';
 import {PHRASE_GUIDE} from '../lib/phrase-guide.ts';
 import * as careerV1 from '../lib/player-career-v1.js';
 import {inspectCareer,advanceCareer} from '../lib/player-career.js';
@@ -173,3 +173,10 @@ test('restarting keeps learning progress and guarantees a chosen nationality',()
 test('every built-in phrase has a word breakdown with one part per word',()=>{
  for(const phrase of CATALOG){const g=PHRASE_GUIDE[phrase.id];assert.ok(g,`missing breakdown: ${phrase.id}`);assert.equal(g.parts.length,phrase.phrase.trim().split(/\s+/).length,`word count: ${phrase.id}`);assert.ok(g.parts.every(x=>x.meaning),phrase.id);}
 });
+test('career rounds pay the same XP as the original game',()=>{
+ assert.equal(careerRoundXp('stat5',7,'Very good (8)'),40);assert.equal(careerRoundXp('skillm',2,'3 stars'),15);
+ assert.equal(careerRoundXp('lt0',3,'3'),150);assert.equal(careerRoundXp('dc1',4,'4'),100);assert.equal(careerRoundXp('dc1',0,'0'),0);
+ assert.equal(careerRoundXp('tm2',0,'PSG'),15);assert.equal(careerRoundXp('euw4_1',0,'UCL'),100);assert.equal(careerRoundXp('eud0',1,'Yes'),0);
+ assert.equal(careerRoundXp('position',9,'RW'),5);assert.equal(careerRoundXp('impv',6,'Fast (7)'),5);
+});
+

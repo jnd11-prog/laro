@@ -95,6 +95,24 @@ function eventKind(id:string):EventKind{
  if(/^(stat|imp|fam)/.test(id))return 'training';if(/^(tm|lg|yr)/.test(id))return 'transfer';
  if(/^(lt|dc|eu|intl|boot|ballon|toty|pots)/.test(id))return 'award';if(/^(goals|assists)/.test(id))return 'match';return 'rest';
 }
+// Amounts through European trophies match the original game's recorded rewards;
+// tournament and individual-award amounts are set on the same scale.
+export function careerRoundXp(id:string,index:number,title:string,value?:number){
+ if(/^stat[0-5]$/.test(id)||id==='weakf'||id==='skillm')return (index+1)*5;
+ if(/^(lg|tm|yr)\d/.test(id))return 15;
+ if(/^lt\d/.test(id))return index*50;
+ if(/^dc\d/.test(id))return index*25;
+ if(/^eu[dn]\d/.test(id))return 0;
+ if(/^euw/.test(id))return ({UCL:100,UEL:50,UECL:25} as Record<string,number>)[title]??25;
+ if(/^intl/.test(id))return title==='Winner'?(id.startsWith('intlwc')?200:100):5;
+ if(id==='goals'||id==='assists')return value===undefined?5:15;
+ if(id==='boots')return (index+1)*75;
+ if(id==='ballonN')return (index+1)*200;
+ if(id==='toty')return index*25;
+ if(id==='pots')return index*50;
+ if(id==='bootsD'||id==='ballon')return 0;
+ return 5;
+}
 function weightedIndex(weights:number[],rng:()=>number){let r=rng()*weights.reduce((a,b)=>a+b,0);for(let i=0;i<weights.length;i++){r-=weights[i];if(r<0)return i;}return weights.length-1;}
 export function spinCareer(input:Career,phrases:Phrase[],id:string,now=Date.now(),rng=Math.random):{state:Career;event:CareerEvent}{
  if(input.pending)throw new Error('Finish your Tagalog round first.');
@@ -106,7 +124,7 @@ export function spinCareer(input:Career,phrases:Phrase[],id:string,now=Date.now(
   const p=choosePhrase(q.options.map(o=>phrases.find(p=>p.id===o.id)!),s,now,rng),index=q.options.findIndex(o=>o.id===p.id);
   s.pending=makeChallenge(p,s.reviews[p.id],id,phrases,rng);s.checkpointAt=builder.choices.length;
   // The event describes the checkpoint, never its English answer.
-  e={id,kind:'message',title:'Tagalog checkpoint',detail:p.category,reward:`Up to +${quizRewards(p,s.pending.mode).win} XP`,day:s.day,season:s.season,question:q.prompt,optionIndex:index,outcome:p.category,wheel:q};
+  e={id,kind:'message',title:'Tagalog checkpoint',detail:p.category,reward:'Up to +60 XP',day:s.day,season:s.season,question:q.prompt,optionIndex:index,outcome:p.category,wheel:q};
  }else if(q.id==='wildcard'){
   const index=weightedIndex(WILDCARDS.map(w=>w.weight),rng),card=WILDCARDS[index];
   s.xp=Math.max(0,s.xp+card.xp);s.wildcardAt=builder.choices.length;
@@ -118,8 +136,9 @@ export function spinCareer(input:Career,phrases:Phrase[],id:string,now=Date.now(
   const values=trophies(r.profile);let awardId:string|undefined;
   for(const [key,count]of Object.entries(values)){const gain=count-(previous[key]||0);if(gain>0){s.trophies[key]=(s.trophies[key]||0)+gain;awardId=key;}}
   if(r.profile.club)s.club=r.profile.club;if(r.profile.goals!==undefined)s.goals=r.profile.goals;if(r.profile.assists!==undefined)s.assists=r.profile.assists;
-  const xp=awardId?30:10;s.xp+=xp;
-  e={id,kind:eventKind(q.id),title:r.title,detail:q.prompt,reward:`+${xp} XP`,day:s.day,season:s.season,question:q.prompt,optionIndex:r.index,outcome:r.title,awardId,wheel:q};
+  const xp=careerRoundXp(q.id,r.index,r.title,r.value);s.xp+=xp;
+  const statLabel=/^stat[0-5]$/.test(q.id)?r.profile.stats[Number(q.id.slice(4))].label:'';
+  e={id,kind:eventKind(q.id),title:r.title,detail:q.prompt,reward:`+${xp} XP${statLabel?` · ${statLabel} checkpoint`:''}`,day:s.day,season:s.season,question:q.prompt,optionIndex:r.index,outcome:r.title,awardId,wheel:q};
   // Every attribute is followed by a Tagalog training question that can move it.
   if(/^stat[0-5]$/.test(q.id)&&!r.complete){
    const stat=r.profile.stats[Number(q.id.slice(4))],pool=phrasePool(phrases,s),p=choosePhrase(pool,s,now,rng);
