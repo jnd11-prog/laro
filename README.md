@@ -16,6 +16,7 @@ Each attribute round is followed by a Tagalog training question that can raise o
 - Manual spins with an explicit next-question step, auto-spin, two speeds, and reduced motion. Auto-spin pauses for Tagalog and stops at the completed career card.
 - Local Web Audio synthesis: decelerating wheel ticks, result jingles, trophy fanfares, and answer sounds. Sound starts after a user gesture and can be muted.
 - An animated pixel-art world: a volcano, rice terraces, drifting clouds, a passing jeepney, a keeper who shuffles during quizzes, and fireworks when you score.
+- Football-culture details on every career: a role from the player's attributes (regista, inverted winger, false 9, Raumdeuter), a traditional shirt number, derby defections called out when they happen (El Clásico, the Old Firm, the Hudson River derby), homecomings, and a career verdict.
 - A pixel arcade layout with a 128×128 canvas wheel, self-hosted pixel font, square controls, larger question and result headings, and readable body text. Wheel angles reflect the backend weights; blocked outcomes cannot be selected.
 - Eighty-four built-in phrases with meanings, usage context, and tap-a-word breakdowns, including lambing, family references, and PBB’s Kuya.
 - A phrasebook and creator studio with audio recording or file upload.
