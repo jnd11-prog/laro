@@ -36,7 +36,7 @@ export function Wheel({ question: e2, rotation: t2, spinning: n2, onSpin: r2, di
                 let o3 = a3 - 63.5, s3 = t4 - 63.5, c3 = Math.sqrt(o3 * o3 + s3 * s3);
                 if (c3 > 63)
                     continue;
-                let l2 = (Math.atan2(s3, o3) * 180 / Math.PI + 90 + (r3[0]?.offset || 0) + 360) % 360, u2 = r3.find((e3) => l2 < e3.end && e3.span > 0) || r3[r3.length - 1], d2 = Math.min(l2 - u2.start, u2.end - l2), f2 = i3(c3 > 61 ? `#6b829e` : c3 > 59 || c3 < 19 ? `#091321` : c3 < 21 ? `#6b829e` : d2 < 0.7 ? `#132033` : e2.options[u2.index].color), p2 = (t4 * 128 + a3) * 4;
+                let l2 = (Math.atan2(s3, o3) * 180 / Math.PI + 90 + (r3[0]?.offset || 0) + 360) % 360, u2 = r3.find((e3) => l2 < e3.end && e3.span > 0) || r3[r3.length - 1], d2 = Math.min(l2 - u2.start, u2.end - l2), f2 = i3(c3 > 61 ? `#ffc800` : c3 > 59 || c3 < 19 ? `#091321` : c3 < 21 ? `#ffc800` : d2 < 0.7 ? `#132033` : e2.options[u2.index].color), p2 = (t4 * 128 + a3) * 4;
                 n3.data[p2] = f2[0], n3.data[p2 + 1] = f2[1], n3.data[p2 + 2] = f2[2], n3.data[p2 + 3] = 255;
             }
         t3.putImageData(n3, 0, 0), t3.fillStyle = `#b6c9cc`;
@@ -47,5 +47,5 @@ export function Wheel({ question: e2, rotation: t2, spinning: n2, onSpin: r2, di
     }, [e2]), <div className={`wheel-stage ${n2 ? `is-spinning` : ``}`}><svg className="pixel-pointer" width="30" height="24" viewBox="0 0 24 20" shapeRendering="crispEdges" aria-hidden="true"><path d="M0 0h24v4h-4v4h-4v4h-4v4H8v-4H4V8H0Z" fill="#ffe27a"/><path d="M4 0h16v3H4Z" fill="#fff2bf"/></svg><div className="wheel-disc" style={{ transform: `rotate(${t2}deg)`, transitionDuration: a2 ? `0.01s` : `${o2}ms` }}><canvas width="128" height="128" ref={s2} className="pixel-wheel" aria-hidden="true"/><svg viewBox="0 0 400 400" className="wheel-labels" role="img" aria-label={e2.options.filter((e3) => !e3.blocked).map((e3) => e3.label).join(`, `)}>{c2.filter((e3) => e3.span >= 7).map((t3) => {
         let n3 = e2.options[t3.index], r3 = Math.min(12, Math.max(8, t3.span * 0.35)), i3 = Math.floor(115 / (r3 * 0.62)), a3 = n3.label.length > i3 ? n3.label.slice(0, i3 - 1) + `…` : n3.label;
         return <text key={n3.id} transform={`rotate(${t3.mid - 90} 200 200)`} x="370" y="200" textAnchor="end" dominantBaseline="central" fontFamily="Laro,monospace" fontSize={r3} fill="#132033">{a3}</text>;
-    })}</svg></div><button onClick={r2} disabled={i2} className="wheel-center" aria-label="Spin career wheel"><PixelBall size={25}/><span>{n2 ? `...` : `SPIN`}</span></button></div>;
+    })}</svg></div><button onClick={r2} disabled={i2} className="wheel-center" aria-label="Spin career wheel"><PixelBall size={25}/><span>{n2 ? `...` : `SPIN!`}</span></button></div>;
 }

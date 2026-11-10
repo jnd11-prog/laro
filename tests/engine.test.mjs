@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,phrasePool,isCareerComplete,getSpinQuestion,quizRewards,WILDCARDS,CAREER_RULES,careerRoundXp} from '../lib/engine.ts';
 import {PHRASE_GUIDE} from '../lib/phrase-guide.ts';
+import {coachLine} from '../lib/coach.ts';
 import * as careerV1 from '../lib/player-career-v1.js';
 import {inspectCareer,advanceCareer} from '../lib/player-career.js';
 import {wheelSegments,landingRotation} from '../lib/wheel.ts';
@@ -27,7 +28,7 @@ test('attribute rounds pause for a Tagalog training question',()=>{
 });
 test('quiz cue does not reveal its English gloss or context, including after mistakes',()=>{
  const s=conversation();let view=quizView(s.pending,p);assert.equal(view.title,p.phrase);assert.equal(view.meaning,null);assert.equal(view.context,null);
- for(let i=0;i<3;i++){s.pending=answerChallenge(s,CATALOG,'wrong',now).state.pending;view=quizView(s.pending,p);assert.equal(view.meaning,null);assert.equal(view.context,null);assert.equal(s.pending.feedback,'Subukan ulit.');}
+ for(let i=0;i<3;i++){s.pending=answerChallenge(s,CATALOG,'wrong',now).state.pending;view=quizView(s.pending,p);assert.equal(view.meaning,null);assert.equal(view.context,null);assert.equal(s.pending.feedback,'Try ulit.');}
 });
 test('Tagalog checkpoint wheels and spin results never display the full phrase before an exercise',()=>{
  for(const streak of [undefined,1,2]){
@@ -197,7 +198,7 @@ test('word ordering includes decoys that never appear in the phrase',()=>{
 test('writing from memory forgives case, punctuation and accents, and hints after repeated misses',()=>{
  const q=makeChallenge(p,review(4),'w',CATALOG,()=>.5);assert.equal(q.options.length,0);let s=initialCareer(42);s.pending=q;
  for(const typed of ['ang galing mo','ANG GALING MO!','Áng gáling mo'])assert.equal(answerChallenge(s,CATALOG,typed,now).correct,true,typed);
- s=answerChallenge(s,CATALOG,'mali',now).state;assert.equal(s.pending.feedback,'Subukan ulit.');s=answerChallenge(s,CATALOG,'mali ulit',now).state;assert.match(s.pending.feedback,/Pahiwatig: A… g… m…/);
+ s=answerChallenge(s,CATALOG,'mali',now).state;assert.equal(s.pending.feedback,'Try ulit.');s=answerChallenge(s,CATALOG,'mali ulit',now).state;assert.match(s.pending.feedback,/Hint: A… g… m…/);
 });
 test('harder exercises pay more XP',()=>{
  const easy={...p,difficulty:1};assert.deepEqual(['meaning','translate','build','type'].map(m=>quizRewards(easy,m).win),[20,40,40,60]);
@@ -209,5 +210,10 @@ test('a Tagalog quiz comes every third round, but not stacked on attribute train
 test('experienced learners stop drawing the easiest phrases',()=>{
  const s=initialCareer(42);for(const q of CATALOG.slice(0,30))s.reviews[q.id]=review(1);
  const pool=phrasePool(CATALOG,s);assert.ok(pool.length>=30);assert.ok(pool.every(q=>(q.difficulty??q.phrase.split(/\s+/).length>=3?(q.difficulty??2):1)>=2));
+});
+test('Kuya Coach reacts to the moment and repeats the same line on reload',()=>{
+ const line=m=>coachLine({spins:0,complete:false,...m});
+ assert.match(line({questionId:'wildcard'}),/Batman/);assert.match(line({pending:{solved:true,tries:1}}),/galing/);assert.match(line({pending:{solved:false,tries:1}}),/Sayang/);assert.match(line({pending:{solved:true,tries:2}}),/Rebound/);assert.match(line({result:{awardId:'ucl'}}),/trophy/);assert.match(line({complete:true}),/One more/);
+ assert.equal(line({questionId:'position'}),line({questionId:'position'}));
 });
 

@@ -88,15 +88,15 @@ export function makeChallenge(p:Phrase,review:Review|undefined,id:string,phrases
  if(mode==='recall'){
   const missingIndex=randomIndex(words.length,rng),target=words[missingIndex].replace(/,/g,'');
   const options=shuffle([target,...shuffle(otherWords(target),rng).slice(0,WRONG_OPTIONS)],rng);
-  return {...base,cue:words.map((w,i)=>i===missingIndex?'_____':w).join(' '),missingIndex,options,prompt:'Kumpletuhin ang pangungusap.'};
+  return {...base,cue:words.map((w,i)=>i===missingIndex?'_____':w).join(' '),missingIndex,options,prompt:'I-complete mo ang sentence.'};
  }
  if(mode==='translate')return {...base,cue:p.meaning,options:shuffle([p.phrase,...distinctFrom(p.phrase,nearMisses(p,phrases,rng).map(q=>q.phrase)).slice(0,WRONG_OPTIONS)],rng),prompt:'Alin ang tamang Tagalog?'};
  if(mode==='build'){
   const distractors=shuffle(otherWords(words.join(' ')).filter(w=>!words.some(x=>normalize(x)===normalize(w))),rng).slice(0,2);
-  return {...base,cue:words[0]+' '+words.slice(1).map(()=>'_____').join(' '),options:shuffle([...words,...distractors],rng),prompt:'Ayusin ang mga salita. May sobrang salita.'};
+  return {...base,cue:words[0]+' '+words.slice(1).map(()=>'_____').join(' '),options:shuffle([...words,...distractors],rng),prompt:'I-arrange mo ang words. May extra words.'};
  }
- if(mode==='type')return {...base,cue:p.meaning,options:[],prompt:'Isulat sa Tagalog.'};
- return {...base,first:true,cue:p.phrase,options:shuffle([p.meaning,...shuffle(distinctFrom(p.meaning,nearMisses(p,phrases,rng).slice(0,8).map(q=>q.meaning)),rng).slice(0,WRONG_OPTIONS)],rng),prompt:'Ano ang ibig sabihin nito?'};
+ if(mode==='type')return {...base,cue:p.meaning,options:[],prompt:'I-type mo sa Tagalog.'};
+ return {...base,first:true,cue:p.phrase,options:shuffle([p.meaning,...shuffle(distinctFrom(p.meaning,nearMisses(p,phrases,rng).slice(0,8).map(q=>q.meaning)),rng).slice(0,WRONG_OPTIONS)],rng),prompt:'Ano ang meaning nito?'};
 }
 export function upgradePending(s:Career,phrases:Phrase[]):Career{
  if(!s.pending||s.pending.solved||s.pending.revision===2)return s;
@@ -182,7 +182,7 @@ export function answerChallenge(input:Career,phrases:Phrase[],answer:string,now=
  }else{
   if(firstTry)s.xp=Math.max(0,s.xp-loss);
   // Typing has no options to narrow down, so repeated misses earn a first-letter hint.
-  q.feedback=q.mode==='type'&&q.tries>=2?`Subukan ulit. Pahiwatig: ${p.phrase.split(/\s+/).map(w=>w[0]+'…').join(' ')}`:'Subukan ulit.';
+  q.feedback=q.mode==='type'&&q.tries>=2?`Try ulit. Hint: ${p.phrase.split(/\s+/).map(w=>w[0]+'…').join(' ')}`:'Try ulit.';
  }
  return {state:upgradeCareer(s),correct};
 }
