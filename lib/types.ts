@@ -6,7 +6,7 @@ export type Review = { seen: number; correct: number; streak: number; due: numbe
 export type EventKind = 'goal' | 'training' | 'match' | 'transfer' | 'message' | 'rest' | 'award';
 export type CareerEvent = { id: string; kind: EventKind; title: string; detail: string; reward: string; day: number; season: number; home?: number; away?: number; question?: string; optionIndex?: number; outcome?: string; awardId?: string; wheel?: SpinQuestion };
 export type TrainingStakes = { key: string; label: string; base: number; difficulty: string; gain: number; penalty: number; delta?: number };
-export type Challenge = { id: string; phraseId: string; mode: 'meaning' | 'recall' | 'build'; options: string[]; prompt: string; first: boolean; tries: number; solved: boolean; feedback?: string; earned?: number; revision?:number; cue?:string; missingIndex?:number; training?: TrainingStakes };
+export type Challenge = { id: string; phraseId: string; mode: 'meaning' | 'recall' | 'translate' | 'build' | 'type'; options: string[]; prompt: string; first: boolean; tries: number; solved: boolean; feedback?: string; earned?: number; revision?:number; cue?:string; missingIndex?:number; training?: TrainingStakes };
 export type Career = {
   season: number; day: number; spins: number; xp: number; goals: number; assists: number; matches: number; wins: number; draws: number;
   rating: number; club: string; division: number; pace: number; shooting: number; passing: number; dribbling: number; stamina: number; defending: number; trophies: Record<string, number>; strength:number; kit: string;

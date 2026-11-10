@@ -20,7 +20,7 @@ export const AWARDS=[
  {id:'boot',label:'GOLDEN BOOT',name:'Golden Boots'},{id:'toty',label:'TOTY',name:'Team of the Year'},{id:'pots',label:'POTS',name:'Player of the Season'},
 ];
 export function exerciseDifficulty(phrase:Phrase,mode?:Challenge['mode']){
- const words=phrase.phrase.trim().split(/\s+/).length,level=Math.min(3,(phrase.difficulty??(words>=5?3:words>=3?2:1))+Number(mode==='build'));
+ const words=phrase.phrase.trim().split(/\s+/).length,bonus=({translate:1,build:1,type:2} as Record<string,number>)[mode||'']||0,level=Math.min(3,(phrase.difficulty??(words>=5?3:words>=3?2:1))+bonus);
  return {difficulty:['Easy','Medium','Hard'][level-1],gain:level*2,penalty:level};
 }
 export function quizRewards(phrase:Phrase,mode?:Challenge['mode']){const level=exerciseDifficulty(phrase,mode).penalty;return {win:level*20,loss:level*5,retry:level*5};}
@@ -38,11 +38,11 @@ export function isCareerComplete(s:Career){return !!s.builder?.complete;}
 export function randomIndex(n:number,rng=Math.random){return Math.min(n-1,Math.floor(rng()*n));}
 export function shuffle<T>(items:T[],rng=Math.random):T[]{const a=[...items];for(let i=a.length-1;i>0;i--){const j=randomIndex(i+1,rng);[a[i],a[j]]=[a[j],a[i]];}return a;}
 export function phraseWeight(review:Review|undefined,now:number){if(!review)return 4;return review.due<=now?6+Math.max(0,3-review.streak)*2:.25;}
-const STARTER_PHRASES=['galing','miss','okay','gets','tara','salamat'];
-// New learners get short, explained phrases; harder ones unlock as more are reviewed.
+const phraseLevel=(p:Phrase)=>p.difficulty??(p.phrase.trim().split(/\s+/).length>=5?3:p.phrase.trim().split(/\s+/).length>=3?2:1);
+// New learners get short phrases; once plenty are reviewed, the easiest ones drop out.
 export function phrasePool(phrases:Phrase[],state?:Career){
- const seen=state?Object.keys(state.reviews).length:99,level=seen<5?1:seen<12?2:3;
- const pool=phrases.filter(p=>PHRASE_GUIDE[p.id]&&(p.id.startsWith('taglish-')||STARTER_PHRASES.includes(p.id))&&(p.difficulty??1)<=level);
+ const seen=state?Object.keys(state.reviews).length:99;
+ const pool=seen<5?phrases.filter(p=>(p.difficulty??1)<=1):seen<12?phrases.filter(p=>(p.difficulty??1)<=2):seen<24?phrases:phrases.filter(p=>phraseLevel(p)>=2);
  return pool.length?pool:phrases;
 }
 export function choosePhrase(phrases:Phrase[],state:Career,now:number,rng=Math.random):Phrase{
@@ -54,8 +54,10 @@ const atSectionEnd=(s:Career,questionId:string)=>s.builder!.choices.at(-1)?.id==
 export function getSpinQuestion(state:Career,phrases:Phrase[],now=Date.now()):SpinQuestion{
  const s=state.builder?state:upgradeCareer(state),b=s.builder!,frame=frameOf(b,s.trainingPoints);
  if(frame.complete)return {id:'complete',prompt:'Career complete',options:[],presentation:'complete',step:b.choices.length,remaining:0};
- const sectionEnd=atSectionEnd(s,frame.question?.id||'');
- if(sectionEnd&&s.checkpointAt!==b.choices.length){
+ const sectionEnd=atSectionEnd(s,frame.question?.id||''),length=b.choices.length;
+ // A quiz every third round, except right after an attribute's own training quiz.
+ const everyThird=length>0&&length%3===0&&!/^stat[0-5]$/.test(b.choices.at(-1)?.id||'');
+ if((sectionEnd||everyThird)&&s.checkpointAt!==length){
   const pool=[...phrasePool(phrases,s)].sort((a,z)=>{
    if(!Object.keys(s.reviews).length){if(a.id==='galing')return -1;if(z.id==='galing')return 1;}
    return phraseWeight(s.reviews[z.id],now)-phraseWeight(s.reviews[a.id],now);
@@ -70,23 +72,36 @@ export function getSpinQuestion(state:Career,phrases:Phrase[],now=Date.now()):Sp
 }
 // A wrong option never repeats another or duplicates something the grader would accept.
 function distinctFrom(answer:string,items:string[]){const seen=new Set([normalize(answer)]);return items.filter(v=>{const k=normalize(v);if(seen.has(k))return false;seen.add(k);return true;});}
+// Near misses first: same category, then the closest length, so the wrong options look plausible.
+function nearMisses(p:Phrase,phrases:Phrase[],rng:()=>number){
+ const size=p.phrase.split(/\s+/).length;
+ const others=phrases.filter(q=>q.id!==p.id).map(q=>({q,score:(q.category===p.category?0:4)+Math.abs(q.phrase.split(/\s+/).length-size)+rng()}));
+ return others.sort((a,b)=>a.score-b.score).map(x=>x.q);
+}
+const WRONG_OPTIONS=3;
 export function makeChallenge(p:Phrase,review:Review|undefined,id:string,phrases:Phrase[],rng=Math.random):Challenge{
- const words=p.phrase.replace(/[.!?]/g,'').split(/\s+/);
- // A one-word phrase has nothing to put in order, and its cue would show the answer.
- const mode=!review?'meaning':review.streak>=2&&words.length>1?'build':'recall';
+ const words=p.phrase.replace(/[.!?]/g,'').split(/\s+/),streak=review?.streak??0;
+ // Each step up asks for more production: recognize, fill in, choose the Tagalog, order it, then write it.
+ const mode:Challenge['mode']=!review?'meaning':streak>=4?'type':streak===3&&words.length>1?'build':streak>=2?'translate':'recall';
+ const base={id,phraseId:p.id,mode,revision:2,first:false,tries:0,solved:false};
+ const otherWords=(exclude:string)=>distinctFrom(exclude,phrases.filter(q=>q.id!==p.id).flatMap(q=>q.phrase.replace(/[.,!?]/g,'').split(/\s+/)));
  if(mode==='recall'){
-  const missingIndex=words.length>1?words.length-1:0,target=words[missingIndex];
-  const others=distinctFrom(target,phrases.filter(q=>q.id!==p.id).flatMap(q=>q.phrase.replace(/[.,!?]/g,'').split(/\s+/)));
-  const options=shuffle([target,...shuffle(others,rng).slice(0,2)],rng);
-  return {id,phraseId:p.id,mode,revision:2,cue:words.map((w,i)=>i===missingIndex?'_____':w).join(' '),missingIndex,options,prompt:'Complete the phrase.',first:false,tries:0,solved:false};
+  const missingIndex=randomIndex(words.length,rng),target=words[missingIndex].replace(/,/g,'');
+  const options=shuffle([target,...shuffle(otherWords(target),rng).slice(0,WRONG_OPTIONS)],rng);
+  return {...base,cue:words.map((w,i)=>i===missingIndex?'_____':w).join(' '),missingIndex,options,prompt:'Kumpletuhin ang pangungusap.'};
  }
- if(mode==='build')return {id,phraseId:p.id,mode,revision:2,cue:words[0]+' '+words.slice(1).map(()=>'_____').join(' '),options:shuffle(words,rng),prompt:'Put the words in order.',first:false,tries:0,solved:false};
- return {id,phraseId:p.id,mode,revision:2,cue:p.phrase,options:shuffle([p.meaning,...shuffle(distinctFrom(p.meaning,phrases.filter(q=>q.id!==p.id).map(q=>q.meaning)),rng).slice(0,2)],rng),prompt:'Choose the meaning.',first:true,tries:0,solved:false};
+ if(mode==='translate')return {...base,cue:p.meaning,options:shuffle([p.phrase,...distinctFrom(p.phrase,nearMisses(p,phrases,rng).map(q=>q.phrase)).slice(0,WRONG_OPTIONS)],rng),prompt:'Alin ang tamang Tagalog?'};
+ if(mode==='build'){
+  const distractors=shuffle(otherWords(words.join(' ')).filter(w=>!words.some(x=>normalize(x)===normalize(w))),rng).slice(0,2);
+  return {...base,cue:words[0]+' '+words.slice(1).map(()=>'_____').join(' '),options:shuffle([...words,...distractors],rng),prompt:'Ayusin ang mga salita. May sobrang salita.'};
+ }
+ if(mode==='type')return {...base,cue:p.meaning,options:[],prompt:'Isulat sa Tagalog.'};
+ return {...base,first:true,cue:p.phrase,options:shuffle([p.meaning,...shuffle(distinctFrom(p.meaning,nearMisses(p,phrases,rng).slice(0,8).map(q=>q.meaning)),rng).slice(0,WRONG_OPTIONS)],rng),prompt:'Ano ang ibig sabihin nito?'};
 }
 export function upgradePending(s:Career,phrases:Phrase[]):Career{
  if(!s.pending||s.pending.solved||s.pending.revision===2)return s;
  const p=phrases.find(p=>p.id===s.pending!.phraseId);if(!p)return s;
- const review=s.pending.mode==='meaning'?undefined:{seen:1,correct:1,streak:s.pending.mode==='build'?2:1,due:0,last:0};
+ const review=s.pending.mode==='meaning'?undefined:{seen:1,correct:1,streak:s.pending.mode==='build'?3:1,due:0,last:0};
  const pending=makeChallenge(p,review,s.pending.id,phrases,()=>.5);pending.tries=s.pending.tries;pending.feedback=s.pending.feedback;pending.training=s.pending.training;
  return {...s,pending};
 }
@@ -148,7 +163,7 @@ export function spinCareer(input:Career,phrases:Phrase[],id:string,now=Date.now(
  }
  s=upgradeCareer(s);s.lastKind=e.kind;s.history=[e,...s.history].slice(0,100);return {state:s,event:e};
 }
-export function normalize(s:string){return s.toLocaleLowerCase().replace(/[.,!?]/g,'').replace(/\s+/g,' ').trim();}
+export function normalize(s:string){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’‘]/g,"'").toLocaleLowerCase().replace(/[.,!?]/g,'').replace(/\s+/g,' ').trim();}
 export function answerChallenge(input:Career,phrases:Phrase[],answer:string,now=Date.now()):{state:Career;correct:boolean}{
  const s=upgradePending(upgradeCareer(structuredClone(input)),phrases),q=s.pending;
  if(!q)throw new Error('No quiz is waiting.');if(q.solved)return {state:s,correct:true};
@@ -164,7 +179,11 @@ export function answerChallenge(input:Career,phrases:Phrase[],answer:string,now=
   q.solved=true;q.earned=firstTry?win:retry;s.xp+=q.earned;
   const old=s.reviews[p.id]||{seen:0,correct:0,streak:0,due:0,last:0},streak=firstTry?old.streak+1:0;
   s.reviews[p.id]={seen:old.seen+1,correct:old.correct+(firstTry?1:0),streak,last:now,due:now+(streak===0?300000:[0,14400000,86400000,259200000,604800000][Math.min(streak,4)])};q.feedback='Tama!';
- }else{if(firstTry)s.xp=Math.max(0,s.xp-loss);q.feedback='Try again.';}
+ }else{
+  if(firstTry)s.xp=Math.max(0,s.xp-loss);
+  // Typing has no options to narrow down, so repeated misses earn a first-letter hint.
+  q.feedback=q.mode==='type'&&q.tries>=2?`Subukan ulit. Pahiwatig: ${p.phrase.split(/\s+/).map(w=>w[0]+'…').join(' ')}`:'Subukan ulit.';
+ }
  return {state:upgradeCareer(s),correct};
 }
 function freshRun(input:Career,preferredNationality?:string):Career{
