@@ -43,7 +43,9 @@ html,body{background:var(--deep)}
 
 /* Play screen */
 .app-shell.play-mode main{padding:0;max-width:none;margin:0}
-.play-screen{position:relative;z-index:1;box-sizing:border-box;max-width:430px;min-height:100dvh;margin:0 auto;padding:16px 20px 74px;display:flex;flex-direction:column}
+.play-screen{position:relative;z-index:1;box-sizing:border-box;max-width:430px;margin:0 auto;padding:16px 20px 80px;display:flex;flex-direction:column}
+.play-screen>.hud,.play-screen>.play-heading,.play-screen>.wheel-playground,.play-screen>.play-cta,.play-screen>.career-card{flex-shrink:0}
+.play-stage{min-height:calc(100dvh - 96px);display:flex;flex-direction:column}
 .hud{display:flex;align-items:center;gap:12px;min-height:44px}
 .hud-progress{flex:1;height:18px;box-sizing:border-box;background:var(--ink);border:3px solid var(--ink)}
 .hud-progress i{display:block;height:100%;background:var(--gold);transition:width .3s steps(4)}
@@ -56,11 +58,22 @@ body:has(.play-mode) .install-app{display:none}
 .play-logo{margin:6px 0 0;text-align:center}
 .play-logo img{width:100%;max-width:366px;image-rendering:pixelated}
 .play-screen .wheel-playground{flex:0 0 auto;min-height:0;display:grid;place-items:center;background:none;overflow:visible;margin:14px 0}
-.play-screen .wheel-stage{--wheel:min(260px,68vw,36dvh);width:var(--wheel);height:var(--wheel)}
+.play-screen .wheel-stage{--wheel:min(260px,68vw,33dvh);width:var(--wheel);height:var(--wheel)}
 .play-screen .wheel-center{inset:auto;left:35%;top:35%;width:30%;height:30%;background:transparent;border:0}
 .play-screen .wheel-center>*{display:none}
 .play-screen .wheel-labels text{font-weight:700}
-.play-cta{margin-top:auto;padding-bottom:10px}
+.play-cta{margin-top:auto;padding-bottom:6px}
+.play-controls{display:flex;justify-content:center;align-items:center;gap:10px;margin-top:10px}
+.play-controls .auto-toggle{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;background:var(--ink);color:var(--text);border:3px solid var(--plum);font:700 17px var(--game)}
+.play-controls .auto-toggle.on{color:var(--gold)}
+.play-controls .speed-button{min-width:56px;min-height:44px;background:var(--ink);color:var(--gold);border:3px solid var(--plum);font:700 19px var(--game)}
+.play-screen>.career-details{margin:22px 0 0;padding-bottom:8px}
+.play-screen .career-details .career-right{display:grid;grid-template-columns:minmax(0,1fr)!important;gap:18px;width:100%;position:static}
+.play-screen .career-details .player-identity{flex-wrap:wrap}
+.play-screen .career-details .panel,.play-screen .career-details>section{background:rgba(10,14,34,.94)}
+.career-card-totals{display:flex;justify-content:center;gap:26px;margin-top:16px}
+.career-card-totals b{display:block;font:700 34px/1 var(--game);color:#fff8e1}
+.career-card-totals span{font:700 13px "DM Sans",sans-serif;color:var(--muted)}
 .play-screen .counter-stage{background:var(--ink);border:4px solid var(--gold);min-height:190px;gap:8px;width:100%}
 .play-screen .counter-stage>.eyebrow,.play-screen .counter-stage>span{font:500 16px var(--game);letter-spacing:0;color:var(--muted)}
 .play-screen .counter-stage>strong{font:700 76px/1 var(--game);color:var(--gold)}
