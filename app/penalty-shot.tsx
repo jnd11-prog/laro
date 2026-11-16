@@ -110,8 +110,8 @@ export default function PenaltyShot({ onShot, disabled, slow }: { onShot: (r: Re
         {game === 'kick' && <><div className="shot-corner left" /><div className="shot-corner right" /></>}
         <div className="shot-keeper" ref={keeper} style={{ width: KEEPER_W, height: KEEPER_H }}>
           <Keeper />
-          {game === 'target' && <svg className="shot-target" style={{ left: CHEST_X - 20, top: CHEST_Y - 20 }} width="40" height="40" viewBox="0 0 10 10" shapeRendering="crispEdges" aria-hidden="true">
-            <path d="M3 0h4v1h2v2h1v4H9v2H7v1H3V9H1V7H0V3h1V1h2Z" fill="#fff8e1" /><path d="M3 2h4v1h1v4H7v1H3V7H2V3h1Z" fill="#1b1a2a" /><path d="M4 3h2v1h1v2H6v1H4V6H3V4h1Z" fill="#fff8e1" /><path d="M4 4h2v2H4Z" fill="#ffc83d" />
+          {game === 'target' && <svg className="shot-target" style={{ left: CHEST_X - 13, top: CHEST_Y - 13 }} width="26" height="26" viewBox="0 0 10 10" shapeRendering="crispEdges" aria-hidden="true">
+            <path d="M3 0h4v1h2v2h1v4H9v2H7v1H3V9H1V7H0V3h1V1h2Z" fill="#1b1a2a" /><path d="M3 2h4v1h1v4H7v1H3V7H2V3h1Z" fill="#ffc83d" /><path d="M4 3h2v1h1v2H6v1H4V6H3V4h1Z" fill="#1b1a2a" /><path d="M4 4h2v2H4Z" fill="#ffffff" />
           </svg>}
         </div>
         {game === 'target' ? <div className="shot-cross" aria-hidden="true" /> : !result && <div className="shot-aim" ref={aim} aria-hidden="true" />}

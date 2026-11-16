@@ -29,3 +29,11 @@
 .stats-error{color:var(--loss)}
 body:has(.stats) .install-app{display:none}
 @media (max-width:760px){.stats-tiles{grid-template-columns:1fr 1fr}.stats-split{grid-template-columns:1fr}}
+
+/* Painted street theme */
+.stats{background:var(--brush),var(--grain-dark),var(--concrete);color:var(--ink)}
+.stats h1{color:var(--ink)!important;font-weight:800}.stats h2{color:var(--ink)}
+.stats-tiles div,.stats-panel{background:var(--paper-tex)!important;border:3px solid var(--ink)!important;border-radius:var(--cut);box-shadow:var(--drop)}
+.stats-tiles span,.stats-tiles small,.stats-legend,.stats-foot{color:var(--ink-soft)!important}.stats-tiles b{color:var(--ink)!important}
+.stats-bars i{background:var(--lilac)!important}.stats-bars em{background:var(--mustard)!important}.stats-legend .all{background:var(--lilac)!important}
+.stats-range{background:var(--paper)!important;border:2px solid var(--ink)!important}.stats-range button{color:var(--ink)!important}
