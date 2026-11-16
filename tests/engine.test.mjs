@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,phrasePool,isCareerComplete,getSpinQuestion,quizRewards,CAREER_RULES,careerRoundXp,COMBO_XP,BOOST_SPINS,BOOST_LUCK,quizTier} from '../lib/engine.ts';
+import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,phrasePool,isCareerComplete,getSpinQuestion,quizRewards,CAREER_RULES,careerRoundXp,COMBO_XP,BOOST_SPINS,BOOST_LUCK,quizTier,CHECKPOINT_MAX_STEP} from '../lib/engine.ts';
 import * as careerV2 from '../lib/player-career-v2.js';
 import {PHRASE_GUIDE} from '../lib/phrase-guide.ts';
 import * as careerV1 from '../lib/player-career-v1.js';
@@ -231,15 +231,33 @@ test('new learners get the easiest phrases, and everything opens up with practic
  for(const q of CATALOG.slice(0,30))s.reviews[q.id]=review(1);assert.equal(phrasePool(CATALOG,s).length,CATALOG.length);
 });
 
-test('Tagalog gets harder as the career goes on and across careers',()=>{
- const s=initialCareer(42);assert.equal(quizTier(s,40),0);s.builder.choices=Array(30).fill({});assert.equal(quizTier(s,10),3);s.season=3;assert.equal(quizTier(s,10),4);
- assert.deepEqual([0,1,2,3,4].map(t=>makeChallenge(p,undefined,'x',CATALOG,()=>.5,t).mode),['meaning','translate','recall','build','build'],'never typing from memory');
- assert.equal(makeChallenge(p,review(4),'x',CATALOG,()=>.5,0).mode,'build','a well-known phrase still climbs on its own');
- assert.equal(makeChallenge(p,undefined,'x',CATALOG,()=>.3,3).options.length,5,'decoys from the First team stage');
- const fresh=initialCareer(42);assert.ok(phrasePool(CATALOG,fresh,0).every(q=>(q.difficulty??1)<=1));assert.ok(phrasePool(CATALOG,fresh,2).some(q=>(q.difficulty??1)===3));
+test('Tagalog gets gently harder over a career, and checkpoints stay easy',()=>{
+ const s=initialCareer(42);assert.equal(quizTier(s,40),0);s.builder.choices=Array(30).fill({});assert.equal(quizTier(s,10),2);s.season=3;assert.equal(quizTier(s,10),2,'never past the third step');
+ s.builder.choices=[];assert.equal(quizTier(s,40),1,'a later career starts one step up');
+ assert.deepEqual([0,1,2].map(t=>makeChallenge(p,undefined,'x',CATALOG,()=>.5,t).mode),['meaning','translate','recall']);
+ assert.deepEqual([0,1,2].map(t=>makeChallenge(p,review(9),'x',CATALOG,()=>.5,t,CHECKPOINT_MAX_STEP).mode),['translate','translate','translate'],'checkpoints never go past picking the Tagalog');
+ assert.equal(makeChallenge(p,review(4),'x',CATALOG,()=>.5,0).options.length,3,'word ordering has no decoys');
+ const fresh=initialCareer(42);assert.ok(phrasePool(CATALOG,fresh,0).every(q=>(q.difficulty??1)<=1));
 });
 
 test('an open typing quiz from an older version turns into word ordering',()=>{
  const s=conversation();s.pending={...s.pending,mode:'type',options:[],revision:2,tries:1};
  const up=upgradePending(s,CATALOG);assert.equal(up.pending.mode,'build');assert.equal(up.pending.tries,1);assert.ok(up.pending.options.length>0);
+});
+test('every exercise carries context: a scene or the meaning, never a lone blank',()=>{
+ const sure=CATALOG.find(x=>x.id==='taglish-sure'),rec=makeChallenge(sure,review(3),'r',CATALOG,()=>.4);
+ assert.equal(rec.mode,'recall');assert.equal(rec.support,sure.meaning,'fill-in shows what the sentence means');
+ const blank=['Sure','ka','ba'][rec.missingIndex];assert.notEqual(blank,'Sure','never blanks a loanword');
+ const sentence=new Set(['sure','ka','ba']);assert.ok(rec.options.every(o=>o===blank||!sentence.has(o.toLowerCase())),'wrong options never repeat a word in the sentence');
+ assert.ok(rec.options.every(o=>/^\p{Ll}/u.test(o)),'options are cased like the missing word');
+ const build=makeChallenge(p,review(4),'b',CATALOG,()=>.4);assert.equal(build.support,p.meaning);
+ const tr=makeChallenge(p,review(2),'t',CATALOG,()=>.4);assert.equal(tr.scene,'Your partner is cheering you on after your first goal.');
+});
+test('a miss removes the wrong choice and reveals the next hint',()=>{
+ const s=initialCareer(42);s.pending=makeChallenge(p,undefined,'m',CATALOG,()=>.5);
+ const wrong=s.pending.options.find(o=>o!==p.meaning);
+ const after=answerChallenge(s,CATALOG,wrong,now).state,view=quizView(after.pending,p);
+ assert.ok(!view.options.includes(wrong));assert.equal(view.options.length,3);
+ assert.match(view.hint,/means/);assert.equal(view.meaning,null,'the answer stays hidden');
+ const solved=answerChallenge(after,CATALOG,p.meaning,now).state;assert.equal(quizView(solved.pending,p).hint,null);
 });

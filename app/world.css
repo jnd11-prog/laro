@@ -341,3 +341,12 @@ body:has(.play-mode) .install-app{display:none}
 .offline-banner{position:relative;z-index:16;margin:0 auto 10px;max-width:430px;padding:10px 14px;background:#2a1140f2;border:3px solid var(--gold);font:500 15px/1.45 var(--read);color:#fff8e1}
 .offline-banner b{color:var(--gold)}
 .app-shell.play-mode .offline-banner{margin:10px auto 0;width:calc(100% - 40px)}
+
+/* Quiz context: a scene, the English being practiced, and a hint after each miss */
+.quiz-scene{display:flex;gap:8px;align-items:flex-start;width:fit-content;max-width:100%;margin:0 auto 10px;padding:8px 12px;background:#fff6dfee;color:var(--plum);font:600 16px/1.4 var(--read);box-shadow:0 0 0 3px var(--plum),4px 4px 0 3px #120828}
+.quiz-scene span,.quiz-hint span{flex:none;padding:1px 6px;background:var(--plum);color:var(--gold);font:700 11px/1.6 var(--game);letter-spacing:.08em}
+.quiz-support{width:fit-content;max-width:100%;margin:10px auto 0;padding:4px 12px;background:#0a0e22d9;color:#fff8e1;font:600 18px/1.35 var(--read);text-align:center}
+.quiz-hint{display:flex;gap:8px;align-items:flex-start;margin:0 auto;padding:8px 12px;max-width:100%;background:#2f7a4f;color:#e9ffe9;font:600 16px/1.4 var(--read);box-shadow:0 0 0 3px #0a0e22}
+.quiz-hint span{background:#0a0e22;color:#7ee0b0}
+.glasses-mode .quiz-scene,.glasses-mode .quiz-hint{font-size:18px}
+.glasses-mode .quiz-support{font-size:20px}

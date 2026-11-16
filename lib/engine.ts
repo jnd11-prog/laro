@@ -50,11 +50,14 @@ const phraseLevel=(p:Phrase)=>p.difficulty??(p.phrase.trim().split(/\s+/).length
 // New learners get short phrases; once plenty are reviewed, the easiest ones drop out.
 // How far along the player is, 0 to 4: a quarter of the career per step, plus one per finished career.
 // Quizzes get harder as this rises, so the Tagalog keeps pace with the football.
-export const QUIZ_LEVELS=['Warm-up','Getting there','Match fit','First team','Captain'];
+export const QUIZ_LEVELS=['Warm-up','Getting there','Match fit'];
+// Kept gentle: three steps over a career, and a later career starts only one step up.
 export function quizTier(state:Career,remaining=0){
  const done=state.builder?.choices.length||0,frac=done/Math.max(1,done+remaining);
- return Math.min(4,Math.floor(Math.min(.999,frac)*4)+Math.max(0,(state.season||1)-1));
+ return Math.min(2,Math.floor(Math.min(.999,frac)*3)+Math.min(1,Math.max(0,(state.season||1)-1)));
 }
+/** Checkpoints only ever ask to recognize the meaning or pick the right Tagalog. */
+export const CHECKPOINT_MAX_STEP=1;
 export function phrasePool(phrases:Phrase[],state?:Career,tier=0){
  const seen=state?Object.keys(state.reviews).length:99;
  // Short phrases first; longer ones arrive with practice or later in the career, and the last stretch favors them.
@@ -76,7 +79,7 @@ export function getSpinQuestion(state:Career,phrases:Phrase[],now=Date.now()):Sp
  // A quiz every third round, except right after an attribute's own training quiz.
  const everyThird=length>0&&length%3===0&&!/^stat[0-5]$/.test(b.choices.at(-1)?.id||'');
  if((sectionEnd||everyThird)&&s.checkpointAt!==length){
-  const pool=[...phrasePool(phrases,s,quizTier(s,frame.question?.remaining))].sort((a,z)=>{
+  const pool=[...phrasePool(phrases,s,Math.min(1,quizTier(s,frame.question?.remaining)))].sort((a,z)=>{
    if(!Object.keys(s.reviews).length){if(a.id==='galing')return -1;if(z.id==='galing')return 1;}
    return phraseWeight(s.reviews[z.id],now)-phraseWeight(s.reviews[a.id],now);
   }).slice(0,6);
@@ -98,29 +101,69 @@ function nearMisses(p:Phrase,phrases:Phrase[],rng:()=>number){
  return others.sort((a,b)=>a.score-b.score).map(x=>x.q);
 }
 const WRONG_OPTIONS=3;
+// Small function words: a blank on one of these is answered with another of the same kind,
+// so the choice tests grammar, not a guess between unrelated words.
+const FUNCTION_WORDS=new Set(['ba','na','pa','po','ho','ka','ko','mo','ako','ikaw','kita','tayo','kami','kayo','sila','siya','niya','namin','natin','nila','raw','daw','din','rin','lang','lamang','naman','nga','ang','ng','sa','si','ni','mga','ay','yung','kasi','dito','diyan','doon','ito','iyan','iyon','hindi','oo','huwag']);
+const SAME_MEANING=[['raw','daw'],['rin','din'],['po','ho'],['lang','lamang']];
+const plainWord=(w:string)=>w.replace(/[.,!?]/g,'').toLocaleLowerCase();
+const partsOf=(p:Phrase)=>PHRASE_GUIDE[p.id]?.parts||[];
+/** A one-line situation from the phrase's usage note, only when it gives nothing of the answer away. */
+export function sceneFor(p:Phrase){
+ const first=(p.context.split(/(?<=[.!?])\s+/)[0]||'').replace(/\bShelomi\b/g,'Your partner').trim();
+ const words=p.phrase.replace(/[.,!?]/g,'').split(/\s+/).map(w=>w.toLocaleLowerCase().replace(/[^\p{L}]/gu,'')).filter(w=>w.length>=3);
+ const leaks=words.some(w=>new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`,'iu').test(first));
+ const filler=/^(an?|the)\s+(everyday|common|casual|simple|useful|short)?\s*(taglish|tagalog|filipino)?\s*(expression|phrase|word|saying)\b/i.test(first);
+ return !leaks&&!filler&&first.length>=18&&first.length<=140&&!/[→"“]/.test(first)?first:undefined;
+}
+// The blank goes on a word worth learning: not a loanword (Sure, Miss) and, when possible, not a tiny function word.
+function blankIndex(p:Phrase,words:string[],rng:()=>number){
+ const parts=partsOf(p),gloss=(i:number)=>parts[i]?.meaning?.toLocaleLowerCase()||'';
+ const loan=(i:number)=>!!gloss(i)&&gloss(i)===plainWord(words[i]);
+ const content=words.map((_,i)=>i).filter(i=>!loan(i)&&!FUNCTION_WORDS.has(plainWord(words[i])));
+ const any=words.map((_,i)=>i).filter(i=>!loan(i));
+ const pool=content.length?content:any.length?any:words.map((_,i)=>i);
+ return pool[randomIndex(pool.length,rng)];
+}
 // Typing from memory was too hard, so new quizzes never ask for it; old saved typing quizzes still grade.
 const LADDER:Challenge['mode'][]=['meaning','translate','recall','build'];
-export function makeChallenge(p:Phrase,review:Review|undefined,id:string,phrases:Phrase[],rng=Math.random,tier=0):Challenge{
+export function makeChallenge(p:Phrase,review:Review|undefined,id:string,phrases:Phrase[],rng=Math.random,tier=0,maxStep=3):Challenge{
  const words=p.phrase.replace(/[.!?]/g,'').split(/\s+/),streak=review?.streak??0;
  // Recognize it, pick the Tagalog, fill one word, then order the words (with decoys at the top levels).
  // A phrase you know well climbs on its own; the career's progress sets the floor.
  const byStreak=!review||streak<2?0:streak===2?1:streak===3?2:3;
- let step=Math.min(3,Math.max(byStreak,tier));if(step===3&&words.length<2)step=2;
+ let step=Math.min(maxStep,3,Math.max(byStreak,tier));if(step===3&&words.length<2)step=2;
  const mode=LADDER[step];
- const base={id,phraseId:p.id,mode,revision:2,first:false,tries:0,solved:false,level:Math.min(4,tier)+1};
+ const base={id,phraseId:p.id,mode,revision:2,first:false,tries:0,solved:false,level:Math.min(QUIZ_LEVELS.length-1,tier)+1};
  const otherWords=(exclude:string)=>distinctFrom(exclude,phrases.filter(q=>q.id!==p.id).flatMap(q=>q.phrase.replace(/[.,!?]/g,'').split(/\s+/)));
+ const parts=partsOf(p);
  if(mode==='recall'){
-  const missingIndex=randomIndex(words.length,rng),target=words[missingIndex].replace(/,/g,'');
-  const options=shuffle([target,...shuffle(otherWords(target),rng).slice(0,WRONG_OPTIONS)],rng);
-  return {...base,cue:words.map((w,i)=>i===missingIndex?'_____':w).join(' '),missingIndex,options,prompt:'I-complete mo ang sentence.'};
+  // Fill the gap, with the English meaning shown, and wrong options of the same kind of word.
+  const missingIndex=blankIndex(p,words,rng),target=words[missingIndex].replace(/,/g,''),key=plainWord(target),isFunction=FUNCTION_WORDS.has(key);
+  const twins=new Set(SAME_MEANING.find(g=>g.includes(key))||[key]);
+  const inSentence=new Set(words.map(plainWord));
+  const others=otherWords(target).filter(w=>!twins.has(plainWord(w))&&!inSentence.has(plainWord(w)));
+  const sameKind=others.filter(w=>FUNCTION_WORDS.has(plainWord(w))===isFunction);
+  const pool=sameKind.length>=WRONG_OPTIONS?sameKind:[...sameKind,...others.filter(w=>!sameKind.includes(w))];
+  // Every option is capitalized the same way as the missing word, so case never gives the answer away.
+  const capital=/^\p{Lu}/u.test(target),asInSlot=(w:string)=>{const b=w.replace(/[.,!?]/g,'');return capital?b[0].toLocaleUpperCase()+b.slice(1):b.toLocaleLowerCase();};
+  const close=distinctFrom(target,shuffle(pool,rng).sort((a,b)=>Math.abs(a.length-target.length)-Math.abs(b.length-target.length)).map(asInSlot)).slice(0,WRONG_OPTIONS);
+  const gloss=parts[missingIndex]?.meaning;
+  return {...base,cue:words.map((w,i)=>i===missingIndex?'_____':w).join(' '),missingIndex,options:shuffle([target,...close],rng),support:p.meaning,
+   hints:[gloss?`The missing word means “${gloss}”.`:`The missing word has ${target.length} letters.`,`It starts with “${target[0]}”.`],prompt:'Ano ang kulang? Fill in the missing word.'};
  }
- if(mode==='translate')return {...base,cue:p.meaning,options:shuffle([p.phrase,...distinctFrom(p.phrase,nearMisses(p,phrases,rng).map(q=>q.phrase)).slice(0,WRONG_OPTIONS)],rng),prompt:'Alin ang tamang Tagalog?'};
+ if(mode==='translate'){
+  // A situation first, then the English, then near-miss Tagalog choices.
+  return {...base,cue:p.meaning,scene:sceneFor(p),options:shuffle([p.phrase,...distinctFrom(p.phrase,nearMisses(p,phrases,rng).map(q=>q.phrase)).slice(0,WRONG_OPTIONS)],rng),
+   hints:[`It starts with “${words[0]}…”.`,parts[1]?`“${parts[1].word}” means ${parts[1].meaning}.`:`It has ${words.length} ${words.length===1?'word':'words'}.`],prompt:'Ano ang sasabihin mo? Pick what you’d say.'};
+ }
  if(mode==='build'){
-  // From the "First team" stage on, two decoy words join the tiles.
-  const decoys=tier>=3?shuffle(otherWords(words.join(' ')).filter(w=>!words.some(x=>normalize(x)===normalize(w))),rng).slice(0,2):[];
-  return {...base,cue:words[0]+' '+words.slice(1).map(()=>'_____').join(' '),options:shuffle([...words,...decoys],rng),prompt:decoys.length?'I-arrange mo ang words. May extra words.':'I-arrange mo ang words.'};
+  return {...base,cue:words[0]+' '+words.slice(1).map(()=>'_____').join(' '),options:shuffle([...words],rng),support:p.meaning,
+   hints:[words[1]?`The next word is “${words[1]}”.`:'',parts.length?`Word by word: ${parts.map(x=>x.meaning).join(' · ')}.`:''].filter(Boolean),prompt:'I-arrange mo ang words. Put them in order.'};
  }
- return {...base,first:true,cue:p.phrase,options:shuffle([p.meaning,...shuffle(distinctFrom(p.meaning,nearMisses(p,phrases,rng).slice(0,8).map(q=>q.meaning)),rng).slice(0,WRONG_OPTIONS)],rng),prompt:'Ano ang meaning nito?'};
+ // Recognize: the hint explains one key word, never the whole meaning.
+ const key=[...parts].filter(x=>x.meaning&&plainWord(x.word)!==x.meaning.toLocaleLowerCase()).sort((a,b)=>b.word.length-a.word.length)[0];
+ return {...base,first:true,cue:p.phrase,options:shuffle([p.meaning,...shuffle(distinctFrom(p.meaning,nearMisses(p,phrases,rng).slice(0,8).map(q=>q.meaning)),rng).slice(0,WRONG_OPTIONS)],rng),
+  hints:key?[`“${key.word}” means ${key.meaning}.`]:[],prompt:'Ano ang meaning nito? What does it mean?'};
 }
 export function upgradePending(s:Career,phrases:Phrase[]):Career{
  // Old quizzes are rebuilt in the current format, and an open typing quiz becomes word ordering.
@@ -162,7 +205,7 @@ export function spinCareer(input:Career,phrases:Phrase[],id:string,now=Date.now(
  let e:CareerEvent;
  if(q.id==='phrase'){
   const p=choosePhrase(q.options.map(o=>phrases.find(p=>p.id===o.id)!),s,now,rng),index=q.options.findIndex(o=>o.id===p.id);
-  s.pending=makeChallenge(p,s.reviews[p.id],id,phrases,rng,quizTier(s,q.remaining));s.checkpointAt=builder.choices.length;
+  s.pending=makeChallenge(p,s.reviews[p.id],id,phrases,rng,Math.min(CHECKPOINT_MAX_STEP,quizTier(s,q.remaining)),CHECKPOINT_MAX_STEP);s.checkpointAt=builder.choices.length;
   // The event describes the checkpoint, never its English answer.
   e={id,kind:'message',title:'Tagalog checkpoint',detail:p.category,reward:`Up to +${quizRewards(p,s.pending.mode).win} XP and a lucky boost`,day:s.day,season:s.season,question:q.prompt,optionIndex:index,outcome:p.category,wheel:q};
  }else if(q.id==='wildcard'){
@@ -210,6 +253,8 @@ export function answerChallenge(input:Career,phrases:Phrase[],answer:string,now=
   s.reviews[p.id]={seen:old.seen+1,correct:old.correct+(firstTry?1:0),streak,last:now,due:now+(streak===0?300000:[0,14400000,86400000,259200000,604800000][Math.min(streak,4)])};q.feedback='Tama!';
  }else{
   if(firstTry){s.xp=Math.max(0,s.xp-loss);s.combo=0;}
+  // The wrong choice drops out, and the next hint (shown by the quiz view) appears.
+  if(q.options.length&&q.mode!=='build'){const miss=q.options.find(o=>normalize(o)===normalize(answer));if(miss&&!(q.removed||[]).includes(miss))q.removed=[...(q.removed||[]),miss];}
   // Typing has no options to narrow down, so repeated misses earn a first-letter hint.
   q.feedback=q.mode==='type'&&q.tries>=2?`Try ulit. Hint: ${p.phrase.split(/\s+/).map(w=>w[0]+'…').join(' ')}`:'Try ulit.';
  }

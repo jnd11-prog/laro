@@ -65,7 +65,7 @@ export function Wheel({ question: e2, rotation: t2, spinning: n2, onSpin: r2, di
 }
 
 // Small pixel sprites drawn from character grids: one letter per art pixel, "." is empty.
-export function Sprite({ rows, palette, className, style, label }) {
+export function Sprite({ rows, palette, className = '', style = {}, label = '' }) {
     const rects = [];
     rows.forEach((row, y) => {
         for (let x = 0; x < row.length;) {
