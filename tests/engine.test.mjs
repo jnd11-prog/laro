@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,phrasePool,isCareerComplete,getSpinQuestion,quizRewards,CAREER_RULES,careerRoundXp,COMBO_XP,BOOST_SPINS,BOOST_LUCK,quizTier,CHECKPOINT_MAX_STEP} from '../lib/engine.ts';
+import {normalize,initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,phrasePool,isCareerComplete,getSpinQuestion,quizRewards,CAREER_RULES,careerRoundXp,BOOST_SPINS,BOOST_LUCK,quizTier,CHECKPOINT_MAX_STEP,QUIZ_XP,SHOT_COST,takeShot} from '../lib/engine.ts';
 import * as careerV2 from '../lib/player-career-v2.js';
 import {PHRASE_GUIDE} from '../lib/phrase-guide.ts';
 import * as careerV1 from '../lib/player-career-v1.js';
@@ -28,7 +28,7 @@ test('attribute rounds pause for a Tagalog training question',()=>{
 });
 test('quiz cue does not reveal its English gloss or context, including after mistakes',()=>{
  const s=conversation();let view=quizView(s.pending,p);assert.equal(view.title,p.phrase);assert.equal(view.meaning,null);assert.equal(view.context,null);
- for(let i=0;i<3;i++){s.pending=answerChallenge(s,CATALOG,'wrong',now).state.pending;view=quizView(s.pending,p);assert.equal(view.meaning,null);assert.equal(view.context,null);assert.equal(s.pending.feedback,'Try ulit.');}
+ for(let i=0;i<3;i++){s.pending=takeShot(answerChallenge(s,CATALOG,'wrong',now).state,'bullseye').pending;view=quizView(s.pending,p);assert.equal(view.meaning,null);assert.equal(view.context,null);assert.equal(s.pending.feedback,'Try ulit.');}
 });
 test('Tagalog checkpoint wheels and spin results never display the full phrase before an exercise',()=>{
  for(const streak of [undefined,1,2]){
@@ -42,11 +42,18 @@ test('Tagalog checkpoint wheels and spin results never display the full phrase b
 test('translation is revealed after a correct answer',()=>{
  const s=answerChallenge(conversation(),CATALOG,p.meaning,now).state;const view=quizView(s.pending,p);assert.equal(view.meaning,p.meaning);assert.equal(view.context,p.context);
 });
-test('mistakes cost nothing, a retry still earns XP, and first tries build a combo',()=>{
- const s=conversation(),{win,loss,retry}=rewards(s.pending),xp=s.xp;assert.equal(loss,0);const wrong=answerChallenge(s,CATALOG,'wrong',now);assert.equal(wrong.correct,false);assert.equal(wrong.state.xp,xp);
- const right=answerChallenge(wrong.state,CATALOG,p.meaning,now);assert.equal(right.correct,true);assert.equal(right.state.xp,xp+retry);assert.equal(right.state.reviews.galing.due,now+300000);assert.equal(right.state.combo,0);
- assert.equal(answerChallenge(right.state,CATALOG,p.meaning,now).state.xp,xp+retry);assert.ok(win>retry);
- const streaky={...s,combo:2},first=answerChallenge(streaky,CATALOG,p.meaning,now).state;assert.equal(first.combo,3);assert.equal(first.xp,xp+win+2*COMBO_XP);
+test('every correct answer is worth 100 XP, and a wrong one means a penalty shot',()=>{
+ const s=conversation(),xp=s.xp;
+ const wrong=answerChallenge(s,CATALOG,'wrong',now);assert.equal(wrong.correct,false);assert.equal(wrong.state.xp,xp,'no XP moves until the shot');assert.equal(wrong.state.pending.shot,'pending');
+ assert.throws(()=>answerChallenge(wrong.state,CATALOG,p.meaning,now),/penalty shot/);
+ assert.equal(takeShot(wrong.state,'bullseye').xp,xp,'a bullseye saves the score');
+ assert.equal(takeShot({...wrong.state,xp:500},'hit').xp,500-SHOT_COST.hit);
+ assert.equal(takeShot({...wrong.state,xp:500},'miss').xp,500-2*SHOT_COST.hit,'a miss costs double');
+ assert.equal(takeShot({...wrong.state,xp:50},'miss').xp,0,'XP never goes below zero');
+ assert.throws(()=>takeShot(s,'hit'),/no penalty shot/);assert.throws(()=>takeShot(wrong.state,'lucky'),/Unknown/);
+ const shot=takeShot(wrong.state,'hit');assert.equal(shot.pending.shot,undefined);assert.deepEqual(shot.pending.lastShot,{result:'hit',cost:100});
+ const right=answerChallenge(shot,CATALOG,p.meaning,now);assert.equal(right.correct,true);assert.equal(right.state.xp,shot.xp+QUIZ_XP,'a retry is worth the same 100');
+ assert.equal(answerChallenge(s,CATALOG,p.meaning,now).state.xp,xp+QUIZ_XP);
 });
 test('a correct Tagalog answer charges lucky spins that lean the wheel toward good outcomes',()=>{
  const s=trainingRound(),solved=answerChallenge(s,CATALOG,answerFor(s.pending),now).state;assert.equal(solved.boost,Math.min(6,(s.boost||0)+BOOST_SPINS));assert.equal(solved.pending.boost,BOOST_SPINS);
@@ -55,7 +62,7 @@ test('a correct Tagalog answer charges lucky spins that lean the wheel toward go
  const top=q=>q.options.at(-1).weight/q.options.reduce((a,o)=>a+o.weight,0);assert.ok(top(lucky)>top(plain),`${top(lucky)} > ${top(plain)}`);
 });
 test('first-try success schedules later review without mutating the original career',()=>{
- const s=conversation(),{win}=rewards(s.pending);const right=answerChallenge(s,CATALOG,p.meaning,now).state;assert.equal(s.pending.solved,false);assert.equal(right.xp,s.xp+win);assert.equal(right.reviews.galing.streak,1);
+ const s=conversation(),win=QUIZ_XP;const right=answerChallenge(s,CATALOG,p.meaning,now).state;assert.equal(s.pending.solved,false);assert.equal(right.xp,s.xp+win);assert.equal(right.reviews.galing.streak,1);
 });
 test('recall uses a missing Tagalog word, never the English meaning as the cue',()=>{
  const review={seen:3,correct:3,streak:3,due:0,last:0};const q=makeChallenge(p,review,'cloze',CATALOG,()=>.5);
@@ -164,7 +171,7 @@ test('training changes the attribute once and keeps it between 10 and 100',()=>{
  const s=trainingRound(),t=s.pending.training,rightAnswer=answerFor(s.pending);
  assert.equal(t.gain,10);const right=answerChallenge(s,CATALOG,rightAnswer,now).state;assert.equal(right.pending.training.delta,10);assert.equal(right.trainingPoints[t.key],10);
  const wrong=answerChallenge(s,CATALOG,'wrong',now).state;assert.ok(wrong.pending.training.delta===0);
- const fixed=answerChallenge(wrong,CATALOG,rightAnswer,now).state;assert.ok(fixed.trainingPoints[t.key]===0);
+ const fixed=answerChallenge(takeShot(wrong,'bullseye'),CATALOG,rightAnswer,now).state;assert.ok(fixed.trainingPoints[t.key]===0);
  const top={...s,pending:{...s.pending,training:{...t,base:100}}};assert.equal(answerChallenge(top,CATALOG,rightAnswer,now).state.pending.training.delta,0);
 });
 test('a section ends with a Tagalog checkpoint, then a plot twist that can switch you to a giant',()=>{
@@ -219,8 +226,8 @@ test('picking the right Tagalog shows English and grades the whole phrase',()=>{
 test('word ordering uses only the words of the phrase itself',()=>{
  const q=makeChallenge(p,review(4),'b',CATALOG,()=>.3);assert.equal(q.options.length,3);assert.deepEqual(q.options.map(o=>o.toLowerCase().replace(/[.!?]/g,'')).sort(),['ang','galing','mo']);
 });
-test('harder exercises pay more XP',()=>{
- const easy={...p,difficulty:1};assert.deepEqual(['meaning','translate','build','type'].map(m=>quizRewards(easy,m).win),[40,80,80,120]);
+test('every exercise pays the same standard XP',()=>{
+ const easy={...p,difficulty:1};assert.deepEqual(['meaning','translate','build','type'].map(m=>quizRewards(easy,m).win),[100,100,100,100]);
 });
 test('a Tagalog quiz comes every third round, but not stacked on attribute training',()=>{
  const s=reach(s=>s.builder.choices.length===3&&getSpinQuestion(s,CATALOG,now).id==='phrase');assert.equal(getSpinQuestion(s,CATALOG,now).id,'phrase');
@@ -259,5 +266,18 @@ test('a miss removes the wrong choice and reveals the next hint',()=>{
  const after=answerChallenge(s,CATALOG,wrong,now).state,view=quizView(after.pending,p);
  assert.ok(!view.options.includes(wrong));assert.equal(view.options.length,3);
  assert.match(view.hint,/means/);assert.equal(view.meaning,null,'the answer stays hidden');
- const solved=answerChallenge(after,CATALOG,p.meaning,now).state;assert.equal(quizView(solved.pending,p).hint,null);
+ const solved=answerChallenge(takeShot(after,'bullseye'),CATALOG,p.meaning,now).state;assert.equal(quizView(solved.pending,p).hint,null);
+});
+test('familiar phrases get look-alike wrong answers that cannot be learned by recognizing the options',()=>{
+ const okay=CATALOG.find(x=>x.id==='okay'),miss=CATALOG.find(x=>x.id==='miss'),real=new Set(CATALOG.map(x=>normalize(x.phrase)));
+ for(let i=0;i<20;i++){
+  const rng=(()=>{let n=i+1;return()=>(n=(n*73+11)%101)/101;})();
+  const q=makeChallenge(okay,review(2),'t',CATALOG,rng);assert.equal(q.mode,'translate');
+  assert.equal(q.options.filter(o=>/okay/i.test(o)).length>=3,true,`the English “okay” must not give it away: ${q.options.join(' | ')}`);
+  assert.equal(q.options.filter(o=>normalize(o)===normalize(okay.phrase)).length,1);
+  for(const o of q.options)if(normalize(o)!==normalize(okay.phrase))assert.ok(!real.has(normalize(o))||!/okay/i.test(o),o);
+  const m=makeChallenge(miss,review(2),'m',CATALOG,rng);assert.ok(!m.options.some(o=>/\bpo\b/i.test(o)),'never adds or removes po');
+ }
+ const seen=new Set();for(let i=0;i<10;i++){const rng=(()=>{let n=i*7+3;return()=>(n=(n*73+11)%101)/101;})();seen.add(makeChallenge(miss,review(2),'v',CATALOG,rng).options.slice().sort().join('|'));}
+ assert.ok(seen.size>=5,'the set of options changes from one time to the next');
 });

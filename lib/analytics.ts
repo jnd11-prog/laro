@@ -2,7 +2,7 @@
 // never an email, name or IP address. Events recorded offline are queued on the device and sent later
 // with their original timestamps, so offline play still shows up in the numbers.
 export const EVENT_NAMES = [
-  'page_view', 'waitlist_join', 'play_start', 'spin', 'quiz_answer', 'career_complete', 'restart', 'offline_open', 'install',
+  'page_view', 'waitlist_join', 'play_start', 'spin', 'quiz_answer', 'shot', 'career_complete', 'restart', 'offline_open', 'install',
 ] as const;
 export type EventName = (typeof EVENT_NAMES)[number];
 /** i is a random per-event ID, so a batch sent twice (two tabs, a retry) is stored once. */

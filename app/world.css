@@ -350,3 +350,35 @@ body:has(.play-mode) .install-app{display:none}
 .quiz-hint span{background:#0a0e22;color:#7ee0b0}
 .glasses-mode .quiz-scene,.glasses-mode .quiz-hint{font-size:18px}
 .glasses-mode .quiz-support{font-size:20px}
+
+/* Penalty shot after a wrong answer */
+.shot{display:grid;gap:10px}
+.shot-title{width:fit-content;max-width:100%;margin:0 auto;padding:6px 12px;text-align:center;font:600 16px/1.4 var(--read);color:#fff8e1;background:#0a0e22e6;box-shadow:0 0 0 3px var(--plum)}
+.shot-title span{padding:2px 8px;background:var(--loss);color:var(--plum);font:700 14px var(--game)}
+.shot-range{position:relative;height:150px;overflow:hidden;cursor:crosshair;background:#2f7a4f;box-shadow:0 0 0 4px #fff8e1,0 0 0 7px var(--plum);touch-action:manipulation}
+.shot-net{position:absolute;inset:8px 8px 0;background:repeating-linear-gradient(90deg,#ffffff33 0 2px,transparent 2px 12px),repeating-linear-gradient(0deg,#ffffff33 0 2px,transparent 2px 12px),#1d5c39;box-shadow:inset 0 0 0 4px #fff8e1}
+.shot-keeper{position:absolute;left:0;bottom:6px;height:120px;will-change:transform}
+.shot-keeper svg:first-child{width:100%;height:100%}
+.shot-target{position:absolute;image-rendering:pixelated;animation:shot-pulse .5s steps(2) infinite}
+@keyframes shot-pulse{50%{transform:scale(.88)}}
+.shot-cross{position:absolute;left:50%;top:0;bottom:0;width:4px;margin-left:-2px;background:repeating-linear-gradient(#ffc83d 0 8px,transparent 8px 14px);pointer-events:none}
+.shot-cross::after{content:"";position:absolute;left:-10px;top:58px;width:24px;height:24px;box-shadow:inset 0 0 0 3px #ffc83d}
+.shot-ball{position:absolute;left:calc(50% - 10px);bottom:-24px;width:20px;height:20px;background:#fff8e1;box-shadow:inset -4px -4px 0 #0a1320,0 0 0 3px #0a1320;animation:shot-fly .45s steps(6) forwards}
+@keyframes shot-fly{to{transform:translate(0,-118px) scale(.7)}}
+.shot-result{width:fit-content;margin:0 auto;padding:6px 14px;font:700 20px var(--game);text-align:center;box-shadow:0 0 0 3px var(--plum)}
+.shot-result.bullseye{background:var(--gold);color:var(--plum)}
+.shot-result.hit{background:#ffb35c;color:var(--plum)}
+.shot-result.miss{background:var(--loss);color:var(--plum)}
+.shot-help{margin:0;text-align:center;font:500 13px var(--read);color:var(--muted)}
+@media (prefers-reduced-motion:reduce){.shot-target,.shot-ball{animation:none}}
+
+/* Red-kit keeper in the quiz scene, and the kick-it-in mini-game */
+.scene-keeper .keeper-art{position:absolute;inset:0;width:100%;height:100%}
+.shot-corner{position:absolute;top:8px;width:24px;height:24px;background:repeating-linear-gradient(45deg,#ffc83d55 0 4px,transparent 4px 8px);box-shadow:inset 0 0 0 3px #ffc83d;animation:shot-pulse .6s steps(2) infinite}
+.shot-corner.left{left:8px}.shot-corner.right{right:8px}
+.shot-aim{position:absolute;left:0;top:0;bottom:0;width:0;pointer-events:none}
+.shot-aim::before{content:"";position:absolute;left:-2px;top:8px;bottom:22px;width:4px;background:repeating-linear-gradient(#fff8e1 0 6px,transparent 6px 12px)}
+.shot-aim::after{content:"";position:absolute;left:-10px;bottom:4px;width:20px;height:16px;background:#ffc83d;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.shot-ball.kick{animation:shot-kick .5s steps(6) forwards}
+@keyframes shot-kick{to{transform:translate(0,-112px) scale(.6)}}
+

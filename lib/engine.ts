@@ -30,8 +30,12 @@ export function exerciseDifficulty(phrase:Phrase,mode?:Challenge['mode']){
  // A training answer moves the attribute by one whole point when right, and never lowers it.
  return {difficulty:['Easy','Medium','Hard'][level-1],gain:10,penalty:0,level};
 }
-export function quizRewards(phrase:Phrase,mode?:Challenge['mode']){const level=exerciseDifficulty(phrase,mode).level;return {win:level*40,loss:0,retry:level*15};}
-export const COMBO_XP=10,COMBO_CAP=5;
+// Standard Tagalog scoring: every correct answer is worth the same, whatever the exercise or try.
+// A wrong answer leads to a penalty shot at the moving keeper, which decides what it costs.
+export const QUIZ_XP=100;
+export const SHOT_COST={bullseye:0,hit:100,miss:200} as const;
+export type ShotResult=keyof typeof SHOT_COST;
+export function quizRewards(_phrase?:Phrase,_mode?:Challenge['mode']){return {win:QUIZ_XP,retry:QUIZ_XP,...SHOT_COST};}
 export function nationalityLabels(){const first=careerV3.advanceCareer(1,[],()=>0).record;return careerV3.inspectCareer(1,[first]).question!.options.map(o=>o.label);}
 
 export function initialCareer(seed=Math.floor(Math.random()*4294967296)):Career{
@@ -109,11 +113,44 @@ const plainWord=(w:string)=>w.replace(/[.,!?]/g,'').toLocaleLowerCase();
 const partsOf=(p:Phrase)=>PHRASE_GUIDE[p.id]?.parts||[];
 /** A one-line situation from the phrase's usage note, only when it gives nothing of the answer away. */
 export function sceneFor(p:Phrase){
- const first=(p.context.split(/(?<=[.!?])\s+/)[0]||'').replace(/\bShelomi\b/g,'Your partner').trim();
+ const first=(p.context.split(/(?<=[.!?])\s+/)[0]||'').replace(/^Shelomi\b/,'Your partner').replace(/\bShelomi\b/g,'your partner').trim();
  const words=p.phrase.replace(/[.,!?]/g,'').split(/\s+/).map(w=>w.toLocaleLowerCase().replace(/[^\p{L}]/gu,'')).filter(w=>w.length>=3);
  const leaks=words.some(w=>new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`,'iu').test(first));
  const filler=/^(an?|the)\s+(everyday|common|casual|simple|useful|short)?\s*(taglish|tagalog|filipino)?\s*(expression|phrase|word|saying)\b/i.test(first);
  return !leaks&&!filler&&first.length>=18&&first.length<=140&&!/[→"“]/.test(first)?first:undefined;
+}
+// Softening particles that can stand in for one another, so swapping between them would not be clearly wrong.
+const SOFTENERS=new Set(['na','lang','lamang','naman','nga','pa']);
+// Word classes for look-alikes: a swap stays inside its class, so the wrong answer still sounds like Tagalog.
+const WORD_CLASSES=[
+ ['ako','ikaw','ka','kita','tayo','kami','kayo','sila','siya'],['mo','ko','niya','natin','namin','nila','ninyo'],
+ ['ba','raw','din','na','pa','lang','naman','nga'],['ang','ng','sa','si','ni','mga'],['ito','iyan','iyon','dito','diyan','doon'],['hindi','huwag'],
+];
+// "po" only adds respect, so a phrase with it swapped in or out would still be right: it is never swapped.
+const classOf=(w:string)=>w==='po'?undefined:WORD_CLASSES.find(c=>c.includes(w));
+const tokens=(phrase:string)=>phrase.split(/\s+/).map(t=>{const m=/^(.*?)([.,!?]*)$/.exec(t)!;return {word:m[1],tail:m[2]};});
+const join=(ts:{word:string;tail:string}[])=>ts.map(t=>t.word+t.tail).join(' ');
+const cased=(w:string,like:string)=>/^\p{Lu}/u.test(like)?w[0].toLocaleUpperCase()+w.slice(1):w.toLocaleLowerCase();
+/**
+ * Look-alike wrong answers: the right phrase with one word swapped for the same kind of word, or two words
+ * in the wrong order. Telling them apart takes knowing what each word does, so they can't be learned by
+ * recognizing the set of options.
+ */
+export function lookAlikes(p:Phrase,phrases:Phrase[],rng:()=>number,keep:Set<string>=new Set()){
+ const ts=tokens(p.phrase),key=normalize(p.phrase),real=new Set(phrases.map(q=>normalize(q.phrase))),out:string[]=[];
+ const pool=[...new Set(phrases.filter(q=>q.id!==p.id).flatMap(q=>tokens(q.phrase).map(t=>t.word)).filter(w=>/^\p{L}+$/u.test(w)))];
+ ts.forEach((t,i)=>{
+  const k=t.word.toLocaleLowerCase();if(!k||keep.has(k))return;
+  const cls=classOf(k),twins=new Set(SAME_MEANING.find(g=>g.includes(k))||[k]);
+  if(FUNCTION_WORDS.has(k)&&!cls)return;
+  // Function words swap within their class; content words swap with content words from the same kind of conversation.
+  const sameTopic=new Set(phrases.filter(q=>q.id!==p.id&&q.category===p.category).flatMap(q=>tokens(q.phrase).map(t=>t.word.toLocaleLowerCase())));
+  const candidates=cls?cls.map(w=>w):pool.filter(w=>{const x=w.toLocaleLowerCase();return x.length>=3&&!FUNCTION_WORDS.has(x)&&sameTopic.has(x);});
+  const choices=shuffle(candidates.filter(w=>{const x=w.toLocaleLowerCase();return x!==k&&!twins.has(x)&&!(SOFTENERS.has(k)&&SOFTENERS.has(x))&&!ts.some(o=>o.word.toLocaleLowerCase()===x);}),rng).slice(0,2);
+  for(const w of choices)out.push(join(ts.map((o,j)=>j===i?{...o,word:cased(w,o.word)}:o)));
+ });
+ if(ts.length>=3)for(let i=1;i<ts.length-1;i++){const sw=ts.map(o=>({...o}));[sw[i].word,sw[i+1].word]=[sw[i+1].word,sw[i].word];out.push(join(sw));}
+ return shuffle([...new Set(out)].filter(o=>{const n=normalize(o);return n!==key&&!real.has(n);}),rng);
 }
 // The blank goes on a word worth learning: not a loanword (Sure, Miss) and, when possible, not a tiny function word.
 function blankIndex(p:Phrase,words:string[],rng:()=>number){
@@ -153,7 +190,15 @@ export function makeChallenge(p:Phrase,review:Review|undefined,id:string,phrases
  }
  if(mode==='translate'){
   // A situation first, then the English, then near-miss Tagalog choices.
-  return {...base,cue:p.meaning,scene:sceneFor(p),options:shuffle([p.phrase,...distinctFrom(p.phrase,nearMisses(p,phrases,rng).map(q=>q.phrase)).slice(0,WRONG_OPTIONS)],rng),
+  // Familiar phrases (or an answer that shares a word with the English) get look-alike wrong answers;
+  // the rest are sampled from a wide pool of near misses so the set of options keeps changing.
+  // Words the English and the Tagalog share (loanwords like "okay") stay in every look-alike, so they can't give it away.
+  const shared=new Set((p.meaning.toLocaleLowerCase().match(/\p{L}{3,}/gu)||[]).filter(w=>new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`,'iu').test(p.phrase)));
+  const englishOverlap=shared.size>0;
+  const alike=streak>=1||tier>=1||englishOverlap?lookAlikes(p,phrases,rng,shared).slice(0,englishOverlap?3:2):[];
+  const near=shuffle(distinctFrom(p.phrase,nearMisses(p,phrases,rng).slice(0,10).map(q=>q.phrase)),rng);
+  const wrong=distinctFrom(p.phrase,[...alike,...near]).slice(0,WRONG_OPTIONS);
+  return {...base,cue:p.meaning,scene:sceneFor(p),options:shuffle([p.phrase,...wrong],rng),
    hints:[`It starts with “${words[0]}…”.`,parts[1]?`“${parts[1].word}” means ${parts[1].meaning}.`:`It has ${words.length} ${words.length===1?'word':'words'}.`],prompt:'Ano ang sasabihin mo? Pick what you’d say.'};
  }
  if(mode==='build'){
@@ -207,7 +252,7 @@ export function spinCareer(input:Career,phrases:Phrase[],id:string,now=Date.now(
   const p=choosePhrase(q.options.map(o=>phrases.find(p=>p.id===o.id)!),s,now,rng),index=q.options.findIndex(o=>o.id===p.id);
   s.pending=makeChallenge(p,s.reviews[p.id],id,phrases,rng,Math.min(CHECKPOINT_MAX_STEP,quizTier(s,q.remaining)),CHECKPOINT_MAX_STEP);s.checkpointAt=builder.choices.length;
   // The event describes the checkpoint, never its English answer.
-  e={id,kind:'message',title:'Tagalog checkpoint',detail:p.category,reward:`Up to +${quizRewards(p,s.pending.mode).win} XP and a lucky boost`,day:s.day,season:s.season,question:q.prompt,optionIndex:index,outcome:p.category,wheel:q};
+  e={id,kind:'message',title:'Tagalog checkpoint',detail:p.category,reward:`+${QUIZ_XP} XP and a lucky boost`,day:s.day,season:s.season,question:q.prompt,optionIndex:index,outcome:p.category,wheel:q};
  }else if(q.id==='wildcard'){
   const index=weightedIndex(WILDCARDS.map(w=>w.weight),rng),card=WILDCARDS[index];
   s.xp=Math.max(0,s.xp+card.xp);s.wildcardAt=builder.choices.length;
@@ -239,26 +284,36 @@ export function answerChallenge(input:Career,phrases:Phrase[],answer:string,now=
  const p=phrases.find(p=>p.id===q.phraseId);if(!p)throw new Error('Phrase not found.');
  const words=p.phrase.replace(/[.!?]/g,'').split(/\s+/);
  const expected=q.mode==='meaning'?p.meaning:q.mode==='recall'?words[q.missingIndex??words.length-1]:p.phrase;
- q.tries++;const correct=normalize(answer)===normalize(expected),firstTry=q.tries===1,{win,loss,retry}=quizRewards(p,q.mode);
+ if(q.shot==='pending')throw new Error('Take your penalty shot first.');
+ q.tries++;const correct=normalize(answer)===normalize(expected),firstTry=q.tries===1;
  if(q.training&&q.training.delta===undefined){
   const t=q.training,points={...(s.trainingPoints||{})},delta=Math.min(100,Math.max(10,t.base+(correct?t.gain:0)))-t.base;
   t.delta=delta;points[t.key]=(points[t.key]||0)+delta;s.trainingPoints=points;
  }
  if(correct){
   // First-try answers build a combo worth extra XP; any correct answer charges lucky spins.
-  s.combo=firstTry?Math.min(COMBO_CAP,(s.combo||0)+1):0;
-  q.solved=true;q.earned=(firstTry?win:retry)+(s.combo>1?(s.combo-1)*COMBO_XP:0);s.xp+=q.earned;
+  q.solved=true;q.earned=QUIZ_XP;s.xp+=q.earned;
   if(s.builder&&funRules(s.builder)){q.boost=firstTry?BOOST_SPINS:1;s.boost=Math.min(6,(s.boost||0)+q.boost);}
   const old=s.reviews[p.id]||{seen:0,correct:0,streak:0,due:0,last:0},streak=firstTry?old.streak+1:0;
   s.reviews[p.id]={seen:old.seen+1,correct:old.correct+(firstTry?1:0),streak,last:now,due:now+(streak===0?300000:[0,14400000,86400000,259200000,604800000][Math.min(streak,4)])};q.feedback='Tama!';
  }else{
-  if(firstTry){s.xp=Math.max(0,s.xp-loss);s.combo=0;}
+  // No XP moves yet: the player takes a penalty shot first (takeShot), and the shot sets the cost.
+  q.shot='pending';
   // The wrong choice drops out, and the next hint (shown by the quiz view) appears.
   if(q.options.length&&q.mode!=='build'){const miss=q.options.find(o=>normalize(o)===normalize(answer));if(miss&&!(q.removed||[]).includes(miss))q.removed=[...(q.removed||[]),miss];}
   // Typing has no options to narrow down, so repeated misses earn a first-letter hint.
   q.feedback=q.mode==='type'&&q.tries>=2?`Try ulit. Hint: ${p.phrase.split(/\s+/).map(w=>w[0]+'…').join(' ')}`:'Try ulit.';
  }
  return {state:upgradeCareer(s),correct};
+}
+/** The penalty shot after a wrong answer: a bullseye saves the score, a hit costs 100 XP, a miss 200. XP never goes below 0. */
+export function takeShot(input:Career,result:string):Career{
+ const s=structuredClone(input),q=s.pending;
+ if(!q||q.shot!=='pending')throw new Error('There is no penalty shot to take.');
+ if(!Object.hasOwn(SHOT_COST,result))throw new Error('Unknown shot result.');
+ const cost=SHOT_COST[result as ShotResult];s.xp=Math.max(0,s.xp-cost);
+ q.shot=undefined;q.lastShot={result:result as ShotResult,cost};q.shots=[...(q.shots||[]),result as ShotResult];
+ return s;
 }
 function freshRun(input:Career,preferredNationality?:string):Career{
  const next=initialCareer();return {...next,season:input.season+1,xp:input.xp,kit:input.kit,reviews:input.reviews,trophies:input.trophies,history:input.history,...(preferredNationality?{preferredNationality}:{})};

@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { ApiError, db, getContext, json, snapshot, owner, save, prior, checkVersion, requestId, sameOrigin } from '@/lib/server';
-import { answerChallenge, nationalityLabels, nextSeason, restartCareer, spinCareer, isCareerComplete } from '@/lib/engine';
+import { answerChallenge, nationalityLabels, nextSeason, restartCareer, spinCareer, isCareerComplete, takeShot } from '@/lib/engine';
 import { CATALOG } from '@/lib/catalog';
 import { unitedHeadlines } from '@/lib/united';
 import { WAITLIST_SQL, parseSignup, sha256 } from '@/lib/waitlist';
@@ -75,8 +75,16 @@ export async function POST(req:Request){
     if(path==='/api/answer'){
       if(body.challengeId!==c.state.pending?.id)throw new ApiError(409,'This conversation has already moved on.');
       if(typeof body.answer!=='string'||body.answer.length>400)throw new ApiError(400,'Choose an answer.');
+      if(c.state.pending?.shot==='pending')throw new ApiError(400,'Take your penalty shot first.');
       const {state,correct}=answerChallenge(c.state,c.phrases,body.answer);
       await save(c,state,id,{correct});return json({...snapshot(c),correct});
+    }
+    if(path==='/api/shot'){
+      if(body.challengeId!==c.state.pending?.id)throw new ApiError(409,'This conversation has already moved on.');
+      if(!['bullseye','hit','miss'].includes(String(body.result)))throw new ApiError(400,'Please check your shot.');
+      if(c.state.pending?.shot!=='pending')throw new ApiError(400,'There is no penalty shot to take.');
+      const state=takeShot(c.state,String(body.result));
+      await save(c,state,id,{shot:state.pending?.lastShot});return json({...snapshot(c),shot:state.pending?.lastShot});
     }
     if(path==='/api/continue'){
       if(!c.state.pending?.solved)throw new ApiError(400,'Finish your conversation first.');
