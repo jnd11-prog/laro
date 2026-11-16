@@ -42,7 +42,7 @@ test('Tagalog checkpoint wheels and spin results never display the full phrase b
 test('translation is revealed after a correct answer',()=>{
  const s=answerChallenge(conversation(),CATALOG,p.meaning,now).state;const view=quizView(s.pending,p);assert.equal(view.meaning,p.meaning);assert.equal(view.context,p.context);
 });
-test('every correct answer is worth 100 XP, and a wrong one means a penalty shot',()=>{
+test('a first-try answer is worth 100 XP, a rebound nothing, and a wrong one means a penalty shot',()=>{
  const s=conversation(),xp=s.xp;
  const wrong=answerChallenge(s,CATALOG,'wrong',now);assert.equal(wrong.correct,false);assert.equal(wrong.state.xp,xp,'no XP moves until the shot');assert.equal(wrong.state.pending.shot,'pending');
  assert.throws(()=>answerChallenge(wrong.state,CATALOG,p.meaning,now),/penalty shot/);
@@ -52,7 +52,7 @@ test('every correct answer is worth 100 XP, and a wrong one means a penalty shot
  assert.equal(takeShot({...wrong.state,xp:50},'miss').xp,0,'XP never goes below zero');
  assert.throws(()=>takeShot(s,'hit'),/no penalty shot/);assert.throws(()=>takeShot(wrong.state,'lucky'),/Unknown/);
  const shot=takeShot(wrong.state,'hit');assert.equal(shot.pending.shot,undefined);assert.deepEqual(shot.pending.lastShot,{result:'hit',cost:100});
- const right=answerChallenge(shot,CATALOG,p.meaning,now);assert.equal(right.correct,true);assert.equal(right.state.xp,shot.xp+QUIZ_XP,'a retry is worth the same 100');
+ const right=answerChallenge(shot,CATALOG,p.meaning,now);assert.equal(right.correct,true);assert.equal(right.state.xp,shot.xp,'a rebound earns no XP');assert.equal(right.state.pending.earned,0);assert.equal(right.state.pending.boost,undefined,'and no lucky spins');
  assert.equal(answerChallenge(s,CATALOG,p.meaning,now).state.xp,xp+QUIZ_XP);
 });
 test('a correct Tagalog answer charges lucky spins that lean the wheel toward good outcomes',()=>{

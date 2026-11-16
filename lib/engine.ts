@@ -35,7 +35,8 @@ export function exerciseDifficulty(phrase:Phrase,mode?:Challenge['mode']){
 export const QUIZ_XP=100;
 export const SHOT_COST={bullseye:0,hit:100,miss:200} as const;
 export type ShotResult=keyof typeof SHOT_COST;
-export function quizRewards(_phrase?:Phrase,_mode?:Challenge['mode']){return {win:QUIZ_XP,retry:QUIZ_XP,...SHOT_COST};}
+// A rebound (right after a miss) earns nothing: no XP and no lucky spins.
+export function quizRewards(_phrase?:Phrase,_mode?:Challenge['mode']){return {win:QUIZ_XP,retry:0,...SHOT_COST};}
 export function nationalityLabels(){const first=careerV3.advanceCareer(1,[],()=>0).record;return careerV3.inspectCareer(1,[first]).question!.options.map(o=>o.label);}
 
 export function initialCareer(seed=Math.floor(Math.random()*4294967296)):Career{
@@ -292,8 +293,8 @@ export function answerChallenge(input:Career,phrases:Phrase[],answer:string,now=
  }
  if(correct){
   // First-try answers build a combo worth extra XP; any correct answer charges lucky spins.
-  q.solved=true;q.earned=QUIZ_XP;s.xp+=q.earned;
-  if(s.builder&&funRules(s.builder)){q.boost=firstTry?BOOST_SPINS:1;s.boost=Math.min(6,(s.boost||0)+q.boost);}
+  q.solved=true;q.earned=firstTry?QUIZ_XP:0;s.xp+=q.earned;
+  if(firstTry&&s.builder&&funRules(s.builder)){q.boost=BOOST_SPINS;s.boost=Math.min(6,(s.boost||0)+q.boost);}
   const old=s.reviews[p.id]||{seen:0,correct:0,streak:0,due:0,last:0},streak=firstTry?old.streak+1:0;
   s.reviews[p.id]={seen:old.seen+1,correct:old.correct+(firstTry?1:0),streak,last:now,due:now+(streak===0?300000:[0,14400000,86400000,259200000,604800000][Math.min(streak,4)])};q.feedback='Tama!';
  }else{
