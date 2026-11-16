@@ -12,6 +12,7 @@ import { CATALOG } from '@/lib/catalog';
 import { AGREE_EXAMPLES, PHRASE_GUIDE } from '@/lib/phrase-guide';
 import { GLASSES, Jersey, KIT_COLORS, PAROL, PixelBall, PixelHeart, PixelTrophy, Sprite, WHEEL, Wheel } from './art';
 import { GLASSES_OFF, GLASSES_ON } from '@/lib/lines';
+import { startTracking, track } from './track';
 import { ELSEWHERE, ago, reaction, storylines } from '@/lib/newsdesk';
 
 const NATIONALITIES = nationalityLabels();
@@ -23,7 +24,7 @@ const ICONS = { goal: Flag, training: Zap, match: Trophy, transfer: ArrowUpRight
 const labels = { goal: `GOAL`, training: `TRAINING`, match: `FULL TIME`, transfer: `TRANSFER`, message: `FROM SHELOMI`, rest: `RECOVERY`, award: `TROPHY` };
 
 export default function Game() {
-    let [snap, setSnap] = useState(null), [view, setView] = useState(`career`), [busy, setBusy] = useState(false), [spinning, setSpinning] = useState(false), [rotation, setRotation] = useState(0), [auto, setAuto] = useState(false), [speed, setSpeed] = useState(1), [sound, setSound] = useState(true), [reduced, setReduced] = useState(false), [notice, setNotice] = useState(``), [error, setError] = useState(``), [settings, setSettings] = useState(false), [help, setHelp] = useState(false), [filter, setFilter] = useState(`All`), [detail, setDetail] = useState(null), [editing, setEditing] = useState(null), [audioActive, setAudioActive] = useState(false), [answerBusy, setAnswerBusy] = useState(false), [tiles, setTiles] = useState([]), [qe, H] = useState(false), [Je, Ye] = useState(``), [counterTarget, setCounterTarget] = useState(0), [activeQuestion, setActiveQuestion] = useState(null), [result, setResult] = useState(null), [activeRound, setActiveRound] = useState(1), [feedbackHold, setFeedbackHold] = useState(false), [countdown, setCountdown] = useState(6), [music, setMusic] = useState(true), [glasses, setGlasses] = useState(false), W = useRef(false), snapshotRef = useRef(snap), st = useRef(0), ct = useRef(null), lt = useRef(null), lessonRef = useRef(null), dt = useRef({ y: 0, height: 0 }), wasLessonOpen = useRef(false);
+    let [snap, setSnap] = useState(null), [view, setView] = useState(`career`), [busy, setBusy] = useState(false), [spinning, setSpinning] = useState(false), [rotation, setRotation] = useState(0), [auto, setAuto] = useState(false), [speed, setSpeed] = useState(1), [sound, setSound] = useState(true), [reduced, setReduced] = useState(false), [notice, setNotice] = useState(``), [error, setError] = useState(``), [settings, setSettings] = useState(false), [help, setHelp] = useState(false), [filter, setFilter] = useState(`All`), [detail, setDetail] = useState(null), [editing, setEditing] = useState(null), [audioActive, setAudioActive] = useState(false), [answerBusy, setAnswerBusy] = useState(false), [tiles, setTiles] = useState([]), [qe, H] = useState(false), [Je, Ye] = useState(``), [counterTarget, setCounterTarget] = useState(0), [activeQuestion, setActiveQuestion] = useState(null), [result, setResult] = useState(null), [activeRound, setActiveRound] = useState(1), [feedbackHold, setFeedbackHold] = useState(false), [countdown, setCountdown] = useState(6), [music, setMusic] = useState(true), [online, setOnline] = useState(true), [glasses, setGlasses] = useState(false), W = useRef(false), snapshotRef = useRef(snap), st = useRef(0), ct = useRef(null), lt = useRef(null), lessonRef = useRef(null), dt = useRef({ y: 0, height: 0 }), wasLessonOpen = useRef(false);
     snapshotRef.current = snap;
     let state = snap?.state || initialCareer(), phrases = snap?.phrases || CATALOG, question = paintQuestion(activeQuestion || getSpinQuestion(state, phrases)), pending = state.pending, phrase = phrases.find((e3) => e3.id === pending?.phraseId), quiz = pending && phrase ? quizView(pending, phrase) : null, complete = isCareerComplete(state), profile = state.profile, lessonOpen = !!(pending && phrase && quiz && view === `career` && !spinning && !result);
     useLayoutEffect(() => {
@@ -69,7 +70,14 @@ export default function Game() {
         let e3 = false;
         (async () => {
             try {
-                await load();
+                let first = await load();
+                // First visit on this device. Players whose career already had spins before analytics
+                // existed are marked existing, so they don't count as brand-new players.
+                try {
+                    localStorage.getItem(`laro-played`) || (localStorage.setItem(`laro-played`, `1`), track(`play_start`, { existing: (first?.state?.spins || 0) > 0 }));
+                }
+                catch {
+                }
                 let e4 = new URLSearchParams(location.search).get(`join`);
                 if (e4) {
                     let t4 = await fetch(`/api/join`, { method: `POST`, headers: { "Content-Type": `application/json` }, body: JSON.stringify({ invite: e4 }) }), n3 = await t4.json();
@@ -101,6 +109,11 @@ export default function Game() {
         arcade.duck(audioActive);
     }, [audioActive]), useEffect(() => {
         // Browsers start audio only after a gesture, so the first tap anywhere starts the music.
+        // Offline: the saved career and phrasebook keep working from this device's copy.
+        let up = () => setOnline(true), down = () => setOnline(false);
+        setOnline(navigator.onLine), window.addEventListener(`online`, up), window.addEventListener(`offline`, down);
+        // Analytics: queued on the device, sent when online (including events from offline play).
+        startTracking(), track(`page_view`, { page: `game` }), navigator.onLine || track(`offline_open`);
         // Every tap retries, since some browsers (iOS Safari) only accept a click or touchend.
         let e3 = () => arcade.unlock(), kinds = [`pointerdown`, `click`, `touchend`, `keydown`];
         return kinds.forEach((k) => window.addEventListener(k, e3, { passive: true })), () => kinds.forEach((k) => window.removeEventListener(k, e3));
@@ -123,7 +136,14 @@ export default function Game() {
         let i3 = snapshotRef.current;
         if (!i3)
             throw Error(`Your career is still connecting.`);
-        let a3 = await fetch(`/api/${e3}`, { method: `POST`, headers: { "Content-Type": `application/json` }, body: JSON.stringify({ ...n3, version: i3.version, requestId: newActionId() }) }), o3 = await a3.json();
+        let a3;
+        try {
+            a3 = await fetch(`/api/${e3}`, { method: `POST`, headers: { "Content-Type": `application/json` }, body: JSON.stringify({ ...n3, version: i3.version, requestId: newActionId() }) });
+        }
+        catch {
+            throw Error(`You’re offline. Your career is saved; reconnect to keep playing.`);
+        }
+        let o3 = await a3.json();
         if (!a3.ok)
             throw a3.status === 409 && await load(), Error(o3.error || `Try again.`);
         return r3 || setSnap(o3), o3;
@@ -148,6 +168,7 @@ export default function Game() {
                 st.current = e4, setRotation(e4);
             }
             arcade.spin(duration), await new Promise((e4) => setTimeout(e4, duration + 90)), dt.current = { y: window.scrollY, height: document.querySelector(`.workspace`)?.getBoundingClientRect().height || document.documentElement.scrollHeight }, setSnap(n3), setResult(n3.event), arcade.result(!!n3.event.awardId);
+            track(`spin`, { q: String(r3.id).replace(/[0-9_].*$/, ``), award: !!n3.event.awardId }), isCareerComplete(n3.state) && track(`career_complete`, { overall: n3.state.profile?.overall || 0 });
         }
         catch (e4) {
             setError(e4.message), setAuto(false);
@@ -200,7 +221,7 @@ export default function Game() {
         if (!W.current) {
             W.current = true, setBusy(true), setAuto(false), setError(``);
             try {
-                await action(`restart`, nat ? { nationality: nat } : {}), advanceQuestion(), setView(`career`), H(false), setSettings(false), setDetail(null), setTiles([]), setFeedbackHold(false), ct.current?.pause(), window.speechSynthesis?.cancel(), setAudioActive(false), notify(`New career started. Your Tagalog progress and XP are saved.`);
+                await action(`restart`, nat ? { nationality: nat } : {}), track(`restart`, { nat: nat || `random` }), advanceQuestion(), setView(`career`), H(false), setSettings(false), setDetail(null), setTiles([]), setFeedbackHold(false), ct.current?.pause(), window.speechSynthesis?.cancel(), setAudioActive(false), notify(`New career started. Your Tagalog progress and XP are saved.`);
             }
             catch (e3) {
                 setError(e3.message);
@@ -214,7 +235,8 @@ export default function Game() {
         if (!(W.current || !pending || pending.solved)) {
             W.current = true, setAnswerBusy(true), setError(``);
             try {
-                arcade.unlock(), (await action(`answer`, { challengeId: pending.id, answer: e3 })).correct ? (arcade.correct(), setFeedbackHold(true)) : arcade.wrong(), setCountdown(6);
+                let res = await action(`answer`, { challengeId: pending.id, answer: e3 });
+                arcade.unlock(), track(`quiz_answer`, { correct: !!res.correct, mode: pending.mode, level: pending.level || 0, first: pending.tries === 0 }), res.correct ? (arcade.correct(), setFeedbackHold(true)) : arcade.wrong(), setCountdown(6);
             }
             catch (e4) {
                 setError(e4.message);
@@ -276,7 +298,7 @@ export default function Game() {
         setAuto(false), Ye(``), H(true);
     }}>RESTART</button><span className="save-status"><i />{snap ? `SAVED` : `CONNECTING`}</span><div className="xp-counter"><Zap size={15} fill="currentColor"/>{state.xp.toLocaleString()}<span>XP</span></div><button className="icon-button" title={sound ? `Mute game sounds` : `Enable game sounds`} aria-label={sound ? `Mute game sounds` : `Enable game sounds`} onClick={() => {
         arcade.unlock(), setSound(!sound);
-    }}>{sound ? <Volume2 size={18}/> : <VolumeX size={18}/>}</button><GlassesButton on={glasses} onClick={toggleGlasses} className="icon-button glasses-button"/><button className="icon-button" aria-label="Game settings" onClick={() => setSettings(true)}><Settings2 size={18}/></button><div className="user-avatar">H<span /></div></div></header>}<main>{error && <div className="error-banner" role="alert"><span>{error}</span>{!snap && <button onClick={() => load().then(() => setError(``)).catch((e3) => setError(e3.message))}>Retry</button>}<button aria-label="Dismiss error" onClick={() => setError(``)}><X size={16}/></button></div>}{view === `career` && <div id="career-quest" tabIndex={-1} className="play-screen"><div className="play-stage"><div className="hud"><div className="hud-progress" role="progressbar" aria-label="Career progress" aria-valuenow={lastProgress.current} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${lastProgress.current}%` }}/></div>{state.boost > 0 && <span className="hud-luck" title="Lucky spins: the wheel leans toward good outcomes">{`LUCKY ×${state.boost}`}</span>}<span className="hud-xp" aria-label={`${state.xp} XP`}>{state.xp.toLocaleString()}</span><GlassesButton on={glasses} onClick={toggleGlasses} className="hud-gear glasses-button"/><button className="hud-gear" aria-label="Game settings" onClick={() => setSettings(true)}><Settings2 size={22}/></button></div>{complete && !result ? <><section className="career-card" aria-label="Career card"><div className="career-card-overall">{profile?.overall}</div><h1>Hyung{glasses && <Sprite {...GLASSES} className="name-glasses"/>}</h1><div className="career-card-position">{profile?.position}{` · #`}{shirtNumber(profile)}</div><div className="career-card-role">{archetype(profile)}</div><div className="career-card-verdict">{verdict(profile)}</div><div className="career-card-totals"><div><b>{profile?.goals || 0}</b><span>Goals</span></div><div><b>{profile?.assists || 0}</b><span>Assists</span></div></div><div className="career-card-trophies"><img src="/art/trophy.png" alt="Trophies"/>{Object.values(state.trophies).reduce((e3, t3) => e3 + t3, 0)}</div></section>{moments(profile).length > 0 && <ul className="career-moments">{moments(profile).slice(0, 3).map((line) => <li key={line}>{line}</li>)}</ul>}<div className="play-cta"><button className="game-cta" onClick={() => {
+    }}>{sound ? <Volume2 size={18}/> : <VolumeX size={18}/>}</button><GlassesButton on={glasses} onClick={toggleGlasses} className="icon-button glasses-button"/><button className="icon-button" aria-label="Game settings" onClick={() => setSettings(true)}><Settings2 size={18}/></button><div className="user-avatar">H<span /></div></div></header>}<main>{!online && <div className="offline-banner" role="status"><b>You’re offline.</b>{` Your saved career, trophies and phrasebook still work. Spins and quizzes come back when you reconnect.`}</div>}{error && <div className="error-banner" role="alert"><span>{error}</span>{!snap && <button onClick={() => load().then(() => setError(``)).catch((e3) => setError(e3.message))}>Retry</button>}<button aria-label="Dismiss error" onClick={() => setError(``)}><X size={16}/></button></div>}{view === `career` && <div id="career-quest" tabIndex={-1} className="play-screen"><div className="play-stage"><div className="hud"><div className="hud-progress" role="progressbar" aria-label="Career progress" aria-valuenow={lastProgress.current} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${lastProgress.current}%` }}/></div>{state.boost > 0 && <span className="hud-luck" title="Lucky spins: the wheel leans toward good outcomes">{`LUCKY ×${state.boost}`}</span>}<span className="hud-xp" aria-label={`${state.xp} XP`}>{state.xp.toLocaleString()}</span><GlassesButton on={glasses} onClick={toggleGlasses} className="hud-gear glasses-button"/><button className="hud-gear" aria-label="Game settings" onClick={() => setSettings(true)}><Settings2 size={22}/></button></div>{complete && !result ? <><section className="career-card" aria-label="Career card"><div className="career-card-overall">{profile?.overall}</div><h1>Hyung{glasses && <Sprite {...GLASSES} className="name-glasses"/>}</h1><div className="career-card-position">{profile?.position}{` · #`}{shirtNumber(profile)}</div><div className="career-card-role">{archetype(profile)}</div><div className="career-card-verdict">{verdict(profile)}</div><div className="career-card-totals"><div><b>{profile?.goals || 0}</b><span>Goals</span></div><div><b>{profile?.assists || 0}</b><span>Assists</span></div></div><div className="career-card-trophies"><img src="/art/trophy.png" alt="Trophies"/>{Object.values(state.trophies).reduce((e3, t3) => e3 + t3, 0)}</div></section>{moments(profile).length > 0 && <ul className="career-moments">{moments(profile).slice(0, 3).map((line) => <li key={line}>{line}</li>)}</ul>}<div className="play-cta"><button className="game-cta" onClick={() => {
         arcade.unlock(), action(`season`).then(() => advanceQuestion()).catch((e3) => setError(e3.message));
     }}>Play again</button></div></> : <><div className="play-heading">{question.id === `wildcard` ? <><h1 className="play-logo"><img src="/art/wildcard.png" alt="Wildcard"/></h1></> : <>{/^twist/.test(question.id) && <p className="twist-kicker">PLOT TWIST</p>}<h1 className="game-title">{result && !spinning ? resultHeading(question, result, profile) : question.prompt}</h1></>}{result && !spinning && <p className="play-reward" role="status">{result.reward.split(` · `)[0]}</p>}{result && !spinning && roundNote(question.id, profile) && <p className="play-note">{roundNote(question.id, profile)}</p>}</div><div className="wheel-playground">{question.id === `wildcard` ? <div className="wildcard-grid" aria-label="Possible XP outcomes">{WILDCARDS.map((card, index) => <div key={card.label} style={{ "--i": index }} className={`wildcard-tile ${card.xp < 0 ? `loss` : ``} ${spinning ? `drawing` : ``} ${result?.optionIndex === index && !spinning ? `picked` : ``}`}>{card.xp > 0 ? `+` : card.xp < 0 ? `−` : ``}{Math.abs(card.xp)}</div>)}</div> : question.presentation === `counter` ? <Counter key={question.id} target={counterTarget} animate={spinning} duration={duration}/> : <Wheel key={question.id} question={question} rotation={rotation} spinning={spinning} onSpin={() => result ? advanceQuestion() : spin()} disabled={!snap || busy || !!pending} reduced={reduced} duration={duration}/>}</div><div className="play-cta"><button className="game-cta" onClick={() => {
         arcade.unlock(), result ? advanceQuestion() : spin();

@@ -25,6 +25,10 @@ New careers use deliberately unrealistic "fun" rules: ranked wheels lean toward 
 - A pixel arcade layout with a 128×128 canvas wheel, self-hosted pixel font, square controls, larger question and result headings, and readable body text. Wheel angles reflect the backend weights; blocked outcomes cannot be selected.
 - Eighty-four built-in phrases with meanings, usage context, and tap-a-word breakdowns, including lambing, family references, and PBB’s Kuya.
 - A phrasebook and creator studio with audio recording or file upload.
+- The home page shows the landing page to new visitors and the game to returning players; the game is always at `/play`.
+- Offline support: after one online visit, the saved career, trophies, phrasebook and landing page open without a connection (`public/sw.js`). Spins and quizzes need the server and say so when offline.
+- First-party analytics (`lib/analytics.ts`, `app/track.ts`): page views, waitlist signups, first plays, spins, quiz answers, finished careers, restarts and installs, keyed by a random device ID with no email, name or IP address. Events recorded offline are queued on the device and sent with their original times on reconnect; each event has an ID so repeats are stored once, and each device is capped per day. A founder dashboard at `/stats` shows aggregate numbers only and requires the `STATS_KEY` Worker secret (`npx wrangler secret put STATS_KEY --name <worker>`), passed as `/stats#key=…`.
+- A landing page at `/welcome` with a waitlist. Signups store only the email, two short answers and an optional `ref`/`utm_source` tag; each signup can remove itself right after joining. List them with `npx wrangler d1 execute laro --remote --command "SELECT email, learning_for, role, source, datetime(created/1000,'unixepoch') FROM waitlist ORDER BY created DESC"`.
 - Creator/learner invitations, with server-side role checks and private audio access.
 - Optimistic concurrency checks and idempotent mutations that prevent duplicated rewards.
 - Automatic review scheduling, with higher selection weights for overdue and weak phrases.
@@ -43,7 +47,7 @@ flowchart TD
 
 Career mutations compare the expected version with the stored version. A D1 batch atomically updates the career and inserts an idempotency record only when the update succeeds. Stale clients receive a conflict response and reload. Replayed request IDs return the saved result without awarding additional XP. Answer correctness and kit eligibility are validated on the server.
 
-`lib/player-career.js` adapts the question families and probability rules from a single-file HTML game, “The Wheel — Build a Footballer”. Each request reconstructs its own simulation from a career seed and recorded choices. Replay validates stage IDs and available outcomes, and there is no mutable simulation state shared between careers. The TypeScript declaration exposes a typed boundary to the API and UI. Each event records the exact question, weights, and selected index for animation.
+`lib/player-career.js` holds the career questions and their probability rules. Each request reconstructs its own simulation from a career seed and recorded choices. Replay validates stage IDs and available outcomes, and there is no mutable simulation state shared between careers. The TypeScript declaration exposes a typed boundary to the API and UI. Each event records the exact question, weights, and selected index for animation.
 
 An invite grants learner membership in the selected career, not creator permissions. Audio requests must belong to the requester's current club. Site-level sharing is a separate access boundary: the initial deployment is owner-private, so Chris needs site access before an in-app invite works.
 

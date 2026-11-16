@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { track } from './track';
 
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -15,7 +16,7 @@ export default function InstallApp() {
     check();
     setIos(/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
     const onPrompt = (event: Event) => { event.preventDefault(); promptRef.current = event as InstallPrompt; setCanPrompt(true); };
-    const onInstalled = () => { setInstalled(true); setHelp(false); promptRef.current = null; };
+    const onInstalled = () => { setInstalled(true); setHelp(false); promptRef.current = null; track('install'); };
     window.addEventListener('beforeinstallprompt', onPrompt);
     window.addEventListener('appinstalled', onInstalled);
     standalone.addEventListener('change', check);
@@ -39,7 +40,7 @@ export default function InstallApp() {
     <button className="secondary-button" onClick={install} aria-expanded={help}>{canPrompt ? 'Install Laro FC' : 'Add Laro FC to your home screen'}</button>
     {help && <div className="install-help"><strong>Install Laro FC</strong>
       <p>{ios ? 'Open this page in Safari, tap Share, then Add to Home Screen. Turn on Open as Web App if shown, then tap Add.' : 'Open your browser’s menu and choose Install app or Add to Home screen. On a computer, look for the install icon in the address bar.'}</p>
-      <p>Internet is needed to play and save your career.</p>
+      <p>Once installed, your saved career and phrasebook open offline. Spins and quizzes need a connection.</p>
       <button onClick={() => setHelp(false)}>Got it</button></div>}
   </aside>;
 }

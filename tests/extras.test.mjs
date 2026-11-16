@@ -42,3 +42,11 @@ test('ago is compact', () => {
   assert.equal(ago(NOW - 3 * 36e5, NOW), '3h');
   assert.equal(ago(NOW - 49 * 36e5, NOW), '2d');
 });
+
+import {parseSignup} from '../lib/waitlist.ts';
+test('waitlist signups are validated and cleaned', () => {
+  assert.deepEqual(parseSignup({email: ' Ana@Example.COM ', learningFor: 'partner', role: 'learner', source: 'tik tok!'}), {email: 'ana@example.com', learningFor: 'partner', role: 'learner', source: 'tiktok'});
+  assert.match(parseSignup({email: 'nope', learningFor: 'partner', role: 'learner'}).error, /valid email/);
+  assert.match(parseSignup({email: 'a@b.co', learningFor: 'boss', role: 'learner'}).error, /learning for/);
+  assert.equal(parseSignup({email: 'a@b.co', learningFor: 'partner', role: 'learner', website: 'http://spam'}).error, '', 'bots get a silent no-op');
+});

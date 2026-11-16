@@ -3,11 +3,14 @@ import { ApiError, db, getContext, json, snapshot, owner, save, prior, checkVers
 import { answerChallenge, nationalityLabels, nextSeason, restartCareer, spinCareer, isCareerComplete } from '@/lib/engine';
 import { CATALOG } from '@/lib/catalog';
 import { unitedHeadlines } from '@/lib/united';
+import { WAITLIST_SQL, parseSignup, sha256 } from '@/lib/waitlist';
+import { DAILY_CAP, EVENTS_INDEX_SQL, EVENTS_SQL, EVENTS_VID_INDEX_SQL, STATS_QUERIES, cleanEvents } from '@/lib/analytics';
 
 export const dynamic='force-dynamic';
 export async function GET(req:Request){
   try{
     const path=new URL(req.url).pathname;
+    if(path==='/api/stats')return await stats(req);
     if(path==='/api/united')return Response.json({source:'BBC Sport',items:await unitedHeadlines()},{headers:{'Cache-Control':'public, max-age=600'}});
     const c=await getContext(req,path==='/api/state');
     if(path==='/api/state')return json(snapshot(c),200,c);
@@ -25,6 +28,9 @@ export async function POST(req:Request){
   try{
     sameOrigin(req);
     const path=new URL(req.url).pathname;
+    // The landing page's waitlist works for visitors who have never opened the game.
+    if(path==='/api/waitlist'||path==='/api/waitlist/remove')return await waitlist(req,path);
+    if(path==='/api/events')return await events(req);
     const c=await getContext(req);
     if(path==='/api/phrases'){
       owner(c);const form=await req.formData().catch(()=>{throw new ApiError(400,'Please check your request.');});
@@ -95,6 +101,51 @@ export async function POST(req:Request){
     await req.text().catch(()=>{});
     return failure(e);
   }
+}
+let eventsReady=false;
+async function ensureEvents(){if(!eventsReady){await db().batch([db().prepare(EVENTS_SQL),db().prepare(EVENTS_INDEX_SQL),db().prepare(EVENTS_VID_INDEX_SQL)]);eventsReady=true;}}
+async function events(req:Request){
+  const data=cleanEvents(await req.json().catch(()=>null));
+  if(!data)throw new ApiError(400,'Please check your request.');
+  if(!data.events.length)return json({ok:true,stored:0});
+  await ensureEvents();
+  const now=Date.now(),recent=await db().prepare('SELECT COUNT(*) AS n FROM analytics WHERE vid=? AND received>=?').bind(data.vid,now-864e5).first<{n:number}>();
+  // Over the daily cap: accept quietly so the device stops resending, but store nothing.
+  if((recent?.n||0)>=DAILY_CAP)return json({ok:true,stored:0});
+  const insert=db().prepare('INSERT OR IGNORE INTO analytics (vid,eid,name,at,props,received) VALUES (?,?,?,?,?,?)');
+  await db().batch(data.events.map(e=>insert.bind(data.vid,e.i||crypto.randomUUID().replaceAll('-',''),e.n,e.t,JSON.stringify(e.p||{}),now)));
+  return json({ok:true,stored:data.events.length});
+}
+// Aggregate numbers only, and only for someone holding the STATS_KEY secret. Without the secret set, it does not exist.
+async function stats(req:Request){
+  const key=(env as {STATS_KEY?:string}).STATS_KEY,given=req.headers.get('authorization')?.replace(/^Bearer /,'')||'';
+  if(!key||key.length<24||!(await sameSecret(given,key)))return json({error:'Not found.'},404);
+  await ensureEvents();if(!waitlistReady){await db().prepare(WAITLIST_SQL).run();waitlistReady=true;}
+  const days=Math.min(90,Math.max(1,Number(new URL(req.url).searchParams.get('days'))||30)),since=Date.now()-days*864e5;
+  const [totals,daily,retention,wait,sources]=await Promise.all([
+    db().prepare(STATS_QUERIES.totals).bind(since).first(),db().prepare(STATS_QUERIES.daily).bind(since).all(),
+    db().prepare(STATS_QUERIES.retention).bind(Date.now()).first(),db().prepare(STATS_QUERIES.waitlist).first(),db().prepare(STATS_QUERIES.sources).all(),
+  ]);
+  return json({days,totals,daily:daily.results,retention,waitlist:wait,sources:sources.results,generated:new Date().toISOString()});
+}
+async function sameSecret(a:string,b:string){const [x,y]=await Promise.all([sha256(a),sha256(b)]);let d=0;for(let i=0;i<x.length;i++)d|=x.charCodeAt(i)^y.charCodeAt(i);return d===0;}
+let waitlistReady=false;
+async function waitlist(req:Request,path:string){
+  if(!waitlistReady){await db().prepare(WAITLIST_SQL).run();waitlistReady=true;}
+  const body=await req.json().catch(()=>null) as Record<string,unknown>|null;
+  if(path==='/api/waitlist/remove'){
+    const token=typeof body?.token==='string'&&/^[a-f0-9]{48}$/.test(body.token)?body.token:'';
+    if(!token)throw new ApiError(400,'This removal link is not valid.');
+    await db().prepare('DELETE FROM waitlist WHERE remove_hash=?').bind(await sha256(token)).run();
+    return json({ok:true});
+  }
+  const entry=parseSignup(body);
+  if('error' in entry){if(entry.error)throw new ApiError(400,entry.error);return json({ok:true});}
+  const token=[...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const added=await db().prepare('INSERT OR IGNORE INTO waitlist (id,email,learning_for,role,source,remove_hash,created) VALUES (?,?,?,?,?,?,?)')
+    .bind(crypto.randomUUID(),entry.email,entry.learningFor,entry.role,entry.source,await sha256(token),Date.now()).run();
+  // The same answer whether or not the email was already there, so the form never reveals who signed up.
+  return json({ok:true,removeToken:added.meta.changes?token:null});
 }
 function failure(e:unknown){
   if(e instanceof ApiError)return json({error:e.message},e.status);
