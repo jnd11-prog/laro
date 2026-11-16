@@ -382,3 +382,22 @@ body:has(.play-mode) .install-app{display:none}
 .shot-ball.kick{animation:shot-kick .5s steps(6) forwards}
 @keyframes shot-kick{to{transform:translate(0,-112px) scale(.6)}}
 
+
+/* RPG dialogue boxes, after A Space for the Unbound: a dark slate box with a thin lilac double frame,
+   a lilac name tag, clean pixel text and a bobbing ▾. Used for the quiz line and every note or pop-up. */
+:root{--rpg-bg:#23233a;--rpg-frame:#c9c3e6;--rpg-name:#bba8f0;--rpg-text:#f4f1ff;--rpg-soft:#c9c3e6}
+.rpg-dialog,.play-note,.career-moments li,.app-shell .toast,.app-shell .modal,.penalty-review,.shot-title,.quiz-scene,.quiz-hint,.offline-banner{
+  background:var(--rpg-bg)!important;color:var(--rpg-text)!important;border-radius:8px;border:0!important;
+  box-shadow:0 0 0 2px #14141f,inset 0 0 0 2px var(--rpg-bg),inset 0 0 0 4px var(--rpg-frame),0 6px 0 2px #0d0d16!important}
+.rpg-dialog{position:relative;margin:28px 0 0;padding:24px 18px 20px;text-align:left}
+.rpg-name{position:absolute;top:-15px;left:14px;padding:2px 12px;background:var(--rpg-bg);color:var(--rpg-name);font:700 17px/1.4 var(--game);border-radius:5px;box-shadow:0 0 0 2px #14141f,inset 0 0 0 2px var(--rpg-frame)}
+.rpg-dialog .penalty-prompt{margin:0 0 6px;padding:0;background:none;box-shadow:none;width:auto;text-align:left;color:var(--rpg-soft);font:500 16px/1.4 var(--read)}
+.rpg-dialog .game-title{text-align:left;font:700 clamp(28px,8.5vw,40px)/1.15 var(--game)!important;color:var(--rpg-text);-webkit-text-stroke:0;filter:none;text-shadow:2px 2px 0 #0d0d16}
+.rpg-dialog .quiz-support{margin:10px 0 0;padding:0;background:none;width:auto;text-align:left;color:#8fe3c8;font:600 17px/1.4 var(--read)}
+.rpg-more{position:absolute;right:14px;bottom:8px;color:var(--rpg-frame);font:700 16px var(--game);animation:rpg-bob .8s steps(2) infinite}
+@keyframes rpg-bob{50%{transform:translateY(3px)}}
+.quiz-scene span,.quiz-hint span,.shot-title span{background:var(--rpg-frame)!important;color:var(--rpg-bg)!important}
+.quiz-hint{color:#8fe3c8!important}
+.play-note{border-left:0!important}.career-moments li{border-left:0!important;padding:10px 14px!important}
+.app-shell .modal .modal-heading h2{color:var(--rpg-name)}
+@media (prefers-reduced-motion:reduce){.rpg-more{animation:none}}

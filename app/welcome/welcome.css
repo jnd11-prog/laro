@@ -153,3 +153,10 @@
 
 /* The game's install prompt does not belong on the landing page. */
 body:has(.welcome) .install-app{display:none}
+
+/* Landing dialogue boxes match the game's RPG dialogue style (see world.css). */
+.w-dialog,.w-card{background:var(--rpg-bg)!important;border-radius:8px;filter:none!important;
+  box-shadow:0 0 0 2px #14141f,inset 0 0 0 2px var(--rpg-bg),inset 0 0 0 4px var(--rpg-frame),0 6px 0 2px #0d0d16!important}
+.w-dialog-name{background:var(--rpg-bg)!important;color:var(--rpg-name)!important;border-radius:5px;box-shadow:0 0 0 2px #14141f,inset 0 0 0 2px var(--rpg-frame)!important;font-size:16px!important}
+.w-stage-n{color:var(--rpg-name)!important}
+.w-more{color:var(--rpg-frame)!important;animation:rpg-bob .8s steps(2) infinite!important}
