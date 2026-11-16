@@ -17,5 +17,5 @@ export type CareerAdvance = {
   question:SpinQuestion; index:number; title:string; value?:number; caption:string; record:CareerChoice;
   profile:SimProfile; complete:boolean; next:SpinQuestion|null; automatic:number;
 };
-export function inspectCareer(seed:number,records?:CareerChoice[],trainingPoints?:TrainingPoints):CareerFrame;
-export function advanceCareer(seed:number,records?:CareerChoice[],pick?:()=>number,trainingPoints?:TrainingPoints,forcedIndex?:number):CareerAdvance;
+export function inspectCareer(seed:number,records?:CareerChoice[],trainingPoints?:TrainingPoints,luck?:number,rules?:number):CareerFrame;
+export function advanceCareer(seed:number,records?:CareerChoice[],pick?:()=>number,trainingPoints?:TrainingPoints,forcedIndex?:number,luck?:number,rules?:number):CareerAdvance;

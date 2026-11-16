@@ -2,11 +2,13 @@ import { env } from 'cloudflare:workers';
 import { ApiError, db, getContext, json, snapshot, owner, save, prior, checkVersion, requestId, sameOrigin } from '@/lib/server';
 import { answerChallenge, nationalityLabels, nextSeason, restartCareer, spinCareer, isCareerComplete } from '@/lib/engine';
 import { CATALOG } from '@/lib/catalog';
+import { unitedHeadlines } from '@/lib/united';
 
 export const dynamic='force-dynamic';
 export async function GET(req:Request){
   try{
     const path=new URL(req.url).pathname;
+    if(path==='/api/united')return Response.json({source:'BBC Sport',items:await unitedHeadlines()},{headers:{'Cache-Control':'public, max-age=600'}});
     const c=await getContext(req,path==='/api/state');
     if(path==='/api/state')return json(snapshot(c),200,c);
     if(path.startsWith('/api/audio/')){

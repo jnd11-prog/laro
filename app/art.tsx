@@ -63,3 +63,20 @@ export function Wheel({ question: e2, rotation: t2, spinning: n2, onSpin: r2, di
         return <text key={n3.id} transform={`rotate(${t3.mid - 90} 200 200)`} x="352" y="200" textAnchor="end" dominantBaseline="central" fontFamily="Pixelify Sans,monospace" fontSize={r3} fill="#1b1533">{a3}</text>;
     })}</svg></div><button onClick={r2} disabled={i2} className="wheel-center" aria-label="Spin career wheel"><PixelBall size={25}/><span>{n2 ? `...` : `SPIN!`}</span></button></div>;
 }
+
+// Small pixel sprites drawn from character grids: one letter per art pixel, "." is empty.
+export function Sprite({ rows, palette, className, style, label }) {
+    const rects = [];
+    rows.forEach((row, y) => {
+        for (let x = 0; x < row.length;) {
+            const ch = row[x];
+            let w = 1;
+            while (row[x + w] === ch) w++;
+            if (ch !== `.`) rects.push(<rect key={`${x}-${y}`} x={x} y={y} width={w} height={1} fill={palette[ch]}/>);
+            x += w;
+        }
+    });
+    return <svg className={className} style={style} viewBox={`0 0 ${rows[0].length} ${rows.length}`} shapeRendering="crispEdges" role={label ? `img` : undefined} aria-label={label} aria-hidden={label ? undefined : true}>{rects}</svg>;
+}
+export const GLASSES = { rows: [`kkkkkkkk....kkkkkkkk`, `kbbbbbbkkkkkkbbbbbbk`, `kbwbbbbk....kbwbbbbk`, `kbbbbbbk....kbbbbbbk`, `.kkkkkk......kkkkkk.`], palette: { k: `#14101f`, b: `#8cc8ff`, w: `#ffffff` } };
+export const PAROL = { rows: [`.....y.....`, `....yry....`, `...yrrry...`, `yyyyrwryyyy`, `.yrrrwrrry.`, `..yrrrrry..`, `..yrryrry..`, `.yry...yry.`, `.yy.....yy.`, `...c.c.c...`, `...c.c.c...`, `..c..c..c..`, `..m..m..m..`], palette: { y: `#ffc83d`, r: `#ea5f4d`, w: `#fff1b3`, c: `#ffd86a`, m: `#d96aa8` } };

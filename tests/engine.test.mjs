@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,phrasePool,isCareerComplete,getSpinQuestion,quizRewards,WILDCARDS,CAREER_RULES,careerRoundXp} from '../lib/engine.ts';
+import {initialCareer,spinCareer,answerChallenge,makeChallenge,upgradePending,upgradeCareer,phraseWeight,nextSeason,restartCareer,phrasePool,isCareerComplete,getSpinQuestion,quizRewards,CAREER_RULES,careerRoundXp,COMBO_XP,BOOST_SPINS,BOOST_LUCK,quizTier} from '../lib/engine.ts';
+import * as careerV2 from '../lib/player-career-v2.js';
 import {PHRASE_GUIDE} from '../lib/phrase-guide.ts';
 import * as careerV1 from '../lib/player-career-v1.js';
 import {inspectCareer,advanceCareer} from '../lib/player-career.js';
@@ -35,29 +36,34 @@ test('Tagalog checkpoint wheels and spin results never display the full phrase b
   const q=getSpinQuestion(s,CATALOG,now),result=spinCareer(s,CATALOG,`privacy-${streak}`,now,()=>0);
   const visible=[...q.options.map(o=>o.label),...result.event.wheel.options.map(o=>o.label),result.event.title,result.event.detail,result.event.outcome].join(' ');
   for(const phrase of CATALOG)assert.ok(!visible.toLowerCase().includes(phrase.phrase.replace(/[.!?]/g,'').toLowerCase()),`hidden phrase: ${phrase.id}`);
-  assert.equal(result.state.pending.mode,streak===2?'translate':streak===1?'recall':'meaning');
+  assert.equal(result.state.pending.mode,streak===2?'translate':'meaning');
  }
 });
 test('translation is revealed after a correct answer',()=>{
  const s=answerChallenge(conversation(),CATALOG,p.meaning,now).state;const view=quizView(s.pending,p);assert.equal(view.meaning,p.meaning);assert.equal(view.context,p.context);
 });
-test('a first mistake costs XP once, a retry earns less, and XP never goes below zero',()=>{
- const s=conversation(),{win,loss,retry}=rewards(s.pending),xp=s.xp;const wrong=answerChallenge(s,CATALOG,'wrong',now);assert.equal(wrong.correct,false);assert.equal(wrong.state.xp,xp-loss);
- const again=answerChallenge(wrong.state,CATALOG,'wrong',now);assert.equal(again.state.xp,xp-loss);
- const right=answerChallenge(again.state,CATALOG,p.meaning,now);assert.equal(right.correct,true);assert.equal(right.state.xp,xp-loss+retry);assert.equal(right.state.reviews.galing.due,now+300000);
- assert.equal(answerChallenge(right.state,CATALOG,p.meaning,now).state.xp,xp-loss+retry);
- const broke={...s,xp:0};assert.equal(answerChallenge(broke,CATALOG,'wrong',now).state.xp,0);assert.ok(win>retry);
+test('mistakes cost nothing, a retry still earns XP, and first tries build a combo',()=>{
+ const s=conversation(),{win,loss,retry}=rewards(s.pending),xp=s.xp;assert.equal(loss,0);const wrong=answerChallenge(s,CATALOG,'wrong',now);assert.equal(wrong.correct,false);assert.equal(wrong.state.xp,xp);
+ const right=answerChallenge(wrong.state,CATALOG,p.meaning,now);assert.equal(right.correct,true);assert.equal(right.state.xp,xp+retry);assert.equal(right.state.reviews.galing.due,now+300000);assert.equal(right.state.combo,0);
+ assert.equal(answerChallenge(right.state,CATALOG,p.meaning,now).state.xp,xp+retry);assert.ok(win>retry);
+ const streaky={...s,combo:2},first=answerChallenge(streaky,CATALOG,p.meaning,now).state;assert.equal(first.combo,3);assert.equal(first.xp,xp+win+2*COMBO_XP);
+});
+test('a correct Tagalog answer charges lucky spins that lean the wheel toward good outcomes',()=>{
+ const s=trainingRound(),solved=answerChallenge(s,CATALOG,answerFor(s.pending),now).state;assert.equal(solved.boost,Math.min(6,(s.boost||0)+BOOST_SPINS));assert.equal(solved.pending.boost,BOOST_SPINS);
+ const next={...solved,pending:null},spun=spinCareer(next,CATALOG,'lucky',now,()=>.6).state;assert.equal(spun.boost,solved.boost-1);
+ const plain=inspectCareer(s.builder.seed,next.builder.choices,next.trainingPoints,0).question,lucky=inspectCareer(s.builder.seed,next.builder.choices,next.trainingPoints,BOOST_LUCK).question;
+ const top=q=>q.options.at(-1).weight/q.options.reduce((a,o)=>a+o.weight,0);assert.ok(top(lucky)>top(plain),`${top(lucky)} > ${top(plain)}`);
 });
 test('first-try success schedules later review without mutating the original career',()=>{
  const s=conversation(),{win}=rewards(s.pending);const right=answerChallenge(s,CATALOG,p.meaning,now).state;assert.equal(s.pending.solved,false);assert.equal(right.xp,s.xp+win);assert.equal(right.reviews.galing.streak,1);
 });
 test('recall uses a missing Tagalog word, never the English meaning as the cue',()=>{
- const review={seen:1,correct:1,streak:1,due:0,last:0};const q=makeChallenge(p,review,'cloze',CATALOG,()=>.5);
+ const review={seen:3,correct:3,streak:3,due:0,last:0};const q=makeChallenge(p,review,'cloze',CATALOG,()=>.5);
  assert.equal(q.mode,'recall');assert.match(q.cue,/_____/);assert.ok(!q.cue.includes(p.meaning));
  const s=initialCareer(42);s.pending=q;assert.equal(answerChallenge(s,CATALOG,p.meaning,now).correct,false);assert.equal(answerChallenge(s,CATALOG,['Ang','galing','mo'][q.missingIndex],now).correct,true);
 });
 test('word ordering hides the full phrase and grades the complete ordered answer',()=>{
- const q=makeChallenge(p,{seen:3,correct:3,streak:3,due:0,last:0},'build',CATALOG,()=>.5);assert.equal(q.mode,'build');assert.equal(q.options.length,5);assert.notEqual(q.cue,p.phrase);assert.ok(!q.cue.includes(p.meaning));
+ const q=makeChallenge(p,{seen:4,correct:4,streak:4,due:0,last:0},'build',CATALOG,()=>.5);assert.equal(q.mode,'build');assert.equal(q.options.length,3);assert.notEqual(q.cue,p.phrase);assert.ok(!q.cue.includes(p.meaning));
  const s=initialCareer(42);s.pending=q;assert.equal(answerChallenge(s,CATALOG,'ang galing mo',now).correct,true);assert.equal(answerChallenge(s,CATALOG,'mo ang galing',now).correct,false);
 });
 test('legacy quizzes upgrade deterministically and preserve their attempt count',()=>{
@@ -100,8 +106,8 @@ test('legacy career metadata and trophies survive the builder upgrade',()=>{
 });
 test('a one-word phrase is never a word-order exercise that shows its own answer',()=>{
  const word={id:'salamat-solo',phrase:'Salamat.',meaning:'Thanks.',context:'Test.',category:'Family'};
- const recall=makeChallenge(word,{seen:1,correct:1,streak:1,due:0,last:0},'solo',[word,...CATALOG],()=>.5);assert.equal(recall.mode,'recall');assert.equal(recall.cue,'_____');assert.ok(recall.options.includes('Salamat'));
- assert.equal(makeChallenge(word,{seen:3,correct:3,streak:3,due:0,last:0},'solo2',[word,...CATALOG],()=>.5).mode,'translate');
+ const recall=makeChallenge(word,{seen:3,correct:3,streak:3,due:0,last:0},'solo',[word,...CATALOG],()=>.5);assert.equal(recall.mode,'recall');assert.equal(recall.cue,'_____');assert.ok(recall.options.includes('Salamat'));
+ assert.equal(makeChallenge(word,{seen:5,correct:5,streak:5,due:0,last:0},'solo2',[word,...CATALOG],()=>.5).mode,'recall');
 });
 test('wrong options never repeat each other or duplicate the correct answer',()=>{
  const twin={id:'twin',phrase:'Magaling ka!',meaning:p.meaning,context:'Test.',category:'Matchday'};
@@ -132,7 +138,7 @@ test('club rules match the real game',()=>{
  for(const {profile:p} of careers)for(const c of p.clubs){
   if(c.name==='Athletic Club')assert.ok(['Spain','France'].includes(p.nationality),p.nationality);
   if(c.cont)assert.ok(!(c.euroWon||[]).some(t=>['UCL','UEL','UECL'].includes(t)),`${c.name} won ${c.euroWon}`);
-  assert.ok(c.lt<=13);
+  assert.ok(c.lt<=Math.min(18,c.years),`${c.lt} titles in ${c.years} seasons`);
  }
 });
 test('tournaments follow the real calendar and skip rounds that do not exist',()=>{
@@ -156,16 +162,36 @@ test('a career started under the original questions keeps replaying them',()=>{
 });
 test('training changes the attribute once and keeps it between 10 and 100',()=>{
  const s=trainingRound(),t=s.pending.training,rightAnswer=answerFor(s.pending);
- const right=answerChallenge(s,CATALOG,rightAnswer,now).state;assert.equal(right.pending.training.delta,t.gain);assert.equal(right.trainingPoints[t.key],t.gain);
- const wrong=answerChallenge(s,CATALOG,'wrong',now).state;assert.equal(wrong.pending.training.delta,-t.penalty);
- const fixed=answerChallenge(wrong,CATALOG,rightAnswer,now).state;assert.equal(fixed.trainingPoints[t.key],-t.penalty);
+ assert.equal(t.gain,10);const right=answerChallenge(s,CATALOG,rightAnswer,now).state;assert.equal(right.pending.training.delta,10);assert.equal(right.trainingPoints[t.key],10);
+ const wrong=answerChallenge(s,CATALOG,'wrong',now).state;assert.ok(wrong.pending.training.delta===0);
+ const fixed=answerChallenge(wrong,CATALOG,rightAnswer,now).state;assert.ok(fixed.trainingPoints[t.key]===0);
  const top={...s,pending:{...s.pending,training:{...t,base:100}}};assert.equal(answerChallenge(top,CATALOG,rightAnswer,now).state.pending.training.delta,0);
 });
-test('a section ends with a Tagalog checkpoint then a wildcard that cannot push XP below zero',()=>{
+test('a section ends with a Tagalog checkpoint, then a plot twist that can switch you to a giant',()=>{
  let s=atSectionCheckpoint();const c=spinCareer(s,CATALOG,'check',now,()=>.6);assert.equal(c.event.title,'Tagalog checkpoint');s=answerChallenge(c.state,CATALOG,answerFor(c.state.pending),now).state;s.pending=null;
- assert.equal(getSpinQuestion(s,CATALOG,now).id,'wildcard');
- const worst=spinCareer({...s,xp:10},CATALOG,'wild',now,()=>.999);assert.equal(worst.event.title,WILDCARDS.at(-1).label);assert.equal(worst.state.xp,0);
- assert.notEqual(getSpinQuestion(worst.state,CATALOG,now).id,'wildcard');
+ const q=getSpinQuestion(s,CATALOG,now);assert.equal(q.id,'twist0');assert.equal(q.options[0].label,'No drama');
+ const twist=spinCareer(s,CATALOG,'twist',now,()=>.999);assert.match(twist.event.title,/^Switch to /);
+ const club=twist.event.title.replace(/^Switch to |!$/g,'');let after=twist.state,guard=0;
+ while(!after.profile.clubs?.[0]&&guard++<5)after=spinCareer(after,CATALOG,`after-${guard}`,now,()=>.6).state;
+ assert.equal(after.profile.clubs[0].name,club,'the league and club resolve by themselves');
+});
+test('careers on the realistic rules still get the XP wildcard',()=>{
+ const choices=[];let f;for(;;){f=careerV2.inspectCareer(7,choices);if(f.question.id==='skillm'||choices.at(-1)?.id==='skillm')break;choices.push(careerV2.advanceCareer(7,choices,()=>.6).record);}
+ const s=initialCareer(7);s.builder={seed:7,choices,complete:false,rules:2};const up=upgradeCareer(s);
+ const at=reach2(up);assert.equal(getSpinQuestion(at,CATALOG,now).id,'wildcard');
+});
+function reach2(s){let i=0;while(getSpinQuestion(s,CATALOG,now).id!=='wildcard'&&i<40){s=spinCareer(s,CATALOG,`v2-${i++}`,now,()=>.6).state;if(s.pending){s=answerChallenge(s,CATALOG,answerFor(s.pending),now).state;s.pending=null;}}return s;}
+test('the Philippines and South Korea are football superpowers',()=>{
+ const first=advanceCareer(1,[],()=>0).record,q=inspectCareer(1,[first]).question,w=Object.fromEntries(q.options.map(o=>[o.label,o.weight]));
+ assert.ok(w.Philippines>w.Brazil&&w['South Korea']>w.Brazil);
+});
+test('league title wheels never offer more titles than seasons at the club, up to 18',()=>{
+ for(const {prompts} of careers)for(const q of prompts.filter(q=>/^lt\d/.test(q.id))){const yrs=Number(/in (\d+) season/.exec(q.prompt)[1]);assert.equal(q.options.at(-1).label,String(Math.min(18,yrs)),q.prompt);}
+});
+test('careers started on the first fun rules replay old title answers but get capped wheels from now on',()=>{
+ let choices=[],f=inspectCareer(5,choices,{},0,3);while(!f.complete&&!/^lt\d/.test(f.question.id)){choices.push(advanceCareer(5,choices,()=>.6,{},undefined,0,3).record);f=inspectCareer(5,choices,{},0,3);}
+ const yrs=Number(/in (\d+) season/.exec(f.question.prompt)[1]);assert.equal(f.question.options.at(-1).label,String(Math.min(18,yrs)),'new title wheels are capped');
+ choices.push({id:f.question.id,index:18,type:'spin'});assert.doesNotThrow(()=>inspectCareer(5,choices,{},0,3),'an old 18-title answer still replays');
 });
 test('restarting keeps learning progress and guarantees a chosen nationality',()=>{
  const s=conversation();s.xp=777;s.reviews={galing:{seen:1,correct:1,streak:1,due:0,last:0}};s.kit='blue';
@@ -176,37 +202,44 @@ test('restarting keeps learning progress and guarantees a chosen nationality',()
 test('every built-in phrase has a word breakdown with one part per word',()=>{
  for(const phrase of CATALOG){const g=PHRASE_GUIDE[phrase.id];assert.ok(g,`missing breakdown: ${phrase.id}`);assert.equal(g.parts.length,phrase.phrase.trim().split(/\s+/).length,`word count: ${phrase.id}`);assert.ok(g.parts.every(x=>x.meaning),phrase.id);}
 });
-test('career rounds pay the same XP as the original game',()=>{
- assert.equal(careerRoundXp('stat5',7,'Very good (8)'),40);assert.equal(careerRoundXp('skillm',2,'3 stars'),15);
- assert.equal(careerRoundXp('lt0',3,'3'),150);assert.equal(careerRoundXp('dc1',4,'4'),100);assert.equal(careerRoundXp('dc1',0,'0'),0);
- assert.equal(careerRoundXp('tm2',0,'PSG'),15);assert.equal(careerRoundXp('euw4_1',0,'UCL'),100);assert.equal(careerRoundXp('eud0',1,'Yes'),0);
- assert.equal(careerRoundXp('position',9,'RW'),5);assert.equal(careerRoundXp('impv',6,'Fast (7)'),5);
+test('career rounds pay modest XP, so a big trophy haul never floods XP',()=>{
+ assert.equal(careerRoundXp('stat5',7,'Very good (8)'),8);assert.equal(careerRoundXp('lt0',3,'3'),9);assert.equal(careerRoundXp('lt0',18,'18'),30);
+ assert.equal(careerRoundXp('dc1',4,'4'),12);assert.equal(careerRoundXp('euw4_1',0,'UCL'),20);assert.equal(careerRoundXp('eud0',1,'Yes'),0);
+ assert.ok(careerRoundXp('lt0',18,'18')<quizRewards({...p,difficulty:1},'meaning').win);
 });
 const review=streak=>({seen:streak+1,correct:streak+1,streak,due:0,last:0});
-test('exercises climb from recognizing to writing as the streak grows',()=>{
- assert.deepEqual([undefined,review(0),review(1),review(2),review(3),review(4)].map(r=>makeChallenge(p,r,'x',CATALOG,()=>.5).mode),['meaning','recall','recall','translate','build','type']);
+test('exercises climb gently from recognizing to ordering, never writing from memory',()=>{
+ assert.deepEqual([undefined,review(0),review(1),review(2),review(3),review(4),review(9)].map(r=>makeChallenge(p,r,'x',CATALOG,()=>.5).mode),['meaning','meaning','meaning','translate','recall','build','build']);
  for(const r of [undefined,review(1),review(2)])assert.equal(makeChallenge(p,r,'x',CATALOG,()=>.5).options.length,4);
 });
 test('picking the right Tagalog shows English and grades the whole phrase',()=>{
  const q=makeChallenge(p,review(2),'t',CATALOG,()=>.5);assert.equal(q.cue,p.meaning);assert.ok(q.options.includes(p.phrase));
  const s=initialCareer(42);s.pending=q;assert.equal(answerChallenge(s,CATALOG,p.phrase,now).correct,true);assert.equal(answerChallenge(s,CATALOG,q.options.find(o=>o!==p.phrase),now).correct,false);
 });
-test('word ordering includes decoys that never appear in the phrase',()=>{
- const q=makeChallenge(p,review(3),'b',CATALOG,()=>.3),words=['ang','galing','mo'],extra=q.options.filter(o=>!words.includes(o.toLowerCase()));assert.equal(extra.length,2);
-});
-test('writing from memory forgives case, punctuation and accents, and hints after repeated misses',()=>{
- const q=makeChallenge(p,review(4),'w',CATALOG,()=>.5);assert.equal(q.options.length,0);let s=initialCareer(42);s.pending=q;
- for(const typed of ['ang galing mo','ANG GALING MO!','Áng gáling mo'])assert.equal(answerChallenge(s,CATALOG,typed,now).correct,true,typed);
- s=answerChallenge(s,CATALOG,'mali',now).state;assert.equal(s.pending.feedback,'Try ulit.');s=answerChallenge(s,CATALOG,'mali ulit',now).state;assert.match(s.pending.feedback,/Hint: A… g… m…/);
+test('word ordering uses only the words of the phrase itself',()=>{
+ const q=makeChallenge(p,review(4),'b',CATALOG,()=>.3);assert.equal(q.options.length,3);assert.deepEqual(q.options.map(o=>o.toLowerCase().replace(/[.!?]/g,'')).sort(),['ang','galing','mo']);
 });
 test('harder exercises pay more XP',()=>{
- const easy={...p,difficulty:1};assert.deepEqual(['meaning','translate','build','type'].map(m=>quizRewards(easy,m).win),[20,40,40,60]);
+ const easy={...p,difficulty:1};assert.deepEqual(['meaning','translate','build','type'].map(m=>quizRewards(easy,m).win),[40,80,80,120]);
 });
 test('a Tagalog quiz comes every third round, but not stacked on attribute training',()=>{
  const s=reach(s=>s.builder.choices.length===3&&getSpinQuestion(s,CATALOG,now).id==='phrase');assert.equal(getSpinQuestion(s,CATALOG,now).id,'phrase');
  const later=reach(s=>s.builder.choices.length===9);assert.notEqual(getSpinQuestion(later,CATALOG,now).id,'phrase');
 });
-test('experienced learners stop drawing the easiest phrases',()=>{
- const s=initialCareer(42);for(const q of CATALOG.slice(0,30))s.reviews[q.id]=review(1);
- const pool=phrasePool(CATALOG,s);assert.ok(pool.length>=30);assert.ok(pool.every(q=>(q.difficulty??q.phrase.split(/\s+/).length>=3?(q.difficulty??2):1)>=2));
+test('new learners get the easiest phrases, and everything opens up with practice',()=>{
+ const s=initialCareer(42);assert.ok(phrasePool(CATALOG,s).every(q=>(q.difficulty??1)<=1));
+ for(const q of CATALOG.slice(0,30))s.reviews[q.id]=review(1);assert.equal(phrasePool(CATALOG,s).length,CATALOG.length);
+});
+
+test('Tagalog gets harder as the career goes on and across careers',()=>{
+ const s=initialCareer(42);assert.equal(quizTier(s,40),0);s.builder.choices=Array(30).fill({});assert.equal(quizTier(s,10),3);s.season=3;assert.equal(quizTier(s,10),4);
+ assert.deepEqual([0,1,2,3,4].map(t=>makeChallenge(p,undefined,'x',CATALOG,()=>.5,t).mode),['meaning','translate','recall','build','build'],'never typing from memory');
+ assert.equal(makeChallenge(p,review(4),'x',CATALOG,()=>.5,0).mode,'build','a well-known phrase still climbs on its own');
+ assert.equal(makeChallenge(p,undefined,'x',CATALOG,()=>.3,3).options.length,5,'decoys from the First team stage');
+ const fresh=initialCareer(42);assert.ok(phrasePool(CATALOG,fresh,0).every(q=>(q.difficulty??1)<=1));assert.ok(phrasePool(CATALOG,fresh,2).some(q=>(q.difficulty??1)===3));
+});
+
+test('an open typing quiz from an older version turns into word ordering',()=>{
+ const s=conversation();s.pending={...s.pending,mode:'type',options:[],revision:2,tries:1};
+ const up=upgradePending(s,CATALOG);assert.equal(up.pending.mode,'build');assert.equal(up.pending.tries,1);assert.ok(up.pending.options.length>0);
 });

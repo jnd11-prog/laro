@@ -8,14 +8,19 @@ A full-stack Tagalog learning app built around a soccer career simulator. Made f
 
 Each round follows the full career builder: position, nationality, debut age, height, career length, attributes, dominant foot, clubs, upgrades, domestic and European competitions, international results, goals, assists, and individual awards. Conditional follow-up questions reflect earlier results. The wheel shows the possible answers and the backend applies the selected result; numeric goal and assist totals use an animated counter. The run ends with a career card rather than an arbitrary spin limit.
 
-Each attribute round is followed by a Tagalog training question that can raise or lower that stat, a Tagalog checkpoint comes every third round, and each section of the career ends with a checkpoint and a wildcard that swings XP. Exercises get harder with each correct review: choosing the meaning, filling in a missing word, picking the right Tagalog for an English sentence, ordering words with extra decoys, and finally writing the phrase from memory. Checkpoint wheels show categories rather than full phrases. The quiz removes the career screen, wheel, and recent history from the rendered page, and hides the English gloss and usage explanation until the answer is correct, including after mistakes. The phrasebook remains available for studying.
+Each attribute round is followed by a Tagalog training question: a correct answer raises that attribute by one point, and a mistake costs nothing. A Tagalog checkpoint comes every third round, and every correct answer charges a few "lucky" spins that lean the next wheels toward good outcomes. Exercises are all multiple choice and get harder as the career goes on (and from one career to the next) or as a phrase is reviewed: choosing the meaning, picking the right Tagalog for an English sentence, filling in a missing word, then ordering the words, with decoys at the top levels. The quiz screen shows the current level.
+
+New careers use deliberately unrealistic "fun" rules: ranked wheels lean toward the good end, the Philippines and South Korea are football superpowers, and before each new club a plot-twist wheel can send the player straight to a giant club. League titles at a club never exceed the seasons spent there. Checkpoint wheels show categories rather than full phrases. The quiz removes the career screen, wheel, and recent history from the rendered page, and hides the English gloss and usage explanation until the answer is correct, including after mistakes. The phrasebook remains available for studying.
 
 ## Included
 
 - Persistent career runs, position-specific attributes, club histories, eleven trophy categories, event history, XP, and kit unlocks.
+- A trophy cabinet for the current career and for every career combined, and a one-tap restart with quick Philippines and South Korea starts.
 - Manual spins with an explicit next-question step, auto-spin, two speeds, and reduced motion. Auto-spin pauses for Tagalog and stops at the completed career card.
-- Local Web Audio synthesis: decelerating wheel ticks, result jingles, trophy fanfares, and answer sounds. Sound starts after a user gesture and can be muted.
-- An animated pixel-art world: a volcano, rice terraces, drifting clouds, a passing jeepney, a keeper who shuffles during quizzes, and fireworks when you score.
+- Local Web Audio synthesis: original lo-fi music with a different song for spinning, quizzes, goals, the plot twist and the menus, plus wheel ticks, jingles and answer sounds. Audio starts after a user gesture; music and sound effects can be turned off separately.
+- An animated pixel-art world: a volcano, rice terraces, drifting clouds, a passing jeepney, parol lanterns, a keeper who shuffles during quizzes, and fireworks when you score.
+- Hyung glasses mode: larger text and a dimmer background, and everyone in the scene wears glasses.
+- The Wire: live Manchester United headlines from BBC Sport's public RSS feed, grouped into storylines by the names that recur and drawn as a transit map over time, with new-since-last-visit markers and Taglish reactions picked from each headline's tone. Grouping and tone are word-based heuristics.
 - Football-culture details on every career: a role from the player's attributes (regista, inverted winger, false 9, Raumdeuter), a traditional shirt number, derby defections called out when they happen (El Clásico, the Old Firm, the Hudson River derby), homecomings, and a career verdict.
 - A pixel arcade layout with a 128×128 canvas wheel, self-hosted pixel font, square controls, larger question and result headings, and readable body text. Wheel angles reflect the backend weights; blocked outcomes cannot be selected.
 - Eighty-four built-in phrases with meanings, usage context, and tap-a-word breakdowns, including lambing, family references, and PBB’s Kuya.
@@ -48,9 +53,11 @@ An invite grants learner membership in the selected career, not creator permissi
 | --- | --- |
 | `lib/engine.ts` | Grades exercises, schedules review, awards XP, and connects the career simulator to the game. |
 | `lib/catalog.ts`, `lib/phrase-guide.ts` | The phrases and their word-by-word notes. |
-| `lib/player-career.js`, `lib/player-career-v1.js` | The seeded career builder and its branching questions; v1 is a frozen copy for older saves. |
+| `lib/player-career.js`, `lib/player-career-v1.js`, `lib/player-career-v2.js` | The seeded career builder and its branching questions; v1 and v2 are frozen copies for older saves. |
 | `lib/server.ts`, `app/api/[...route]/route.ts` | Identity, membership, atomic saves, and the HTTP API. |
-| `app/game.tsx`, `app/art.tsx` | The game UI, quiz, phrasebook, studio, pixel art, and weighted wheel. |
+| `app/game.tsx`, `app/art.tsx` | The game UI, quiz, phrasebook, studio, The Wire, trophy cabinet, pixel art, and weighted wheel. |
+| `lib/arcade.ts` | The music and sound effects, synthesized with Web Audio. |
+| `lib/united.ts`, `lib/newsdesk.ts` | Fetching United headlines and grouping them into storylines. |
 
 `components/ui/`, `vendor/`, and most of `scripts/` are framework and hosting scaffolding. `app/game.tsx`, `app/art.tsx`, `app/globals.css`, and `lib/player-career-v1.js` were recovered from a compiled deployment, so their local names are short and the stylesheet is compiled.
 
@@ -106,12 +113,12 @@ LARO_TEST_URL=http://localhost:5173 node tests/integration.mjs
 
 No generated audio is represented as Shelomi's voice. Starter phrases use a Filipino device voice only when one is installed. Real recordings uploaded in the studio take precedence. Microphone recording requires browser permission and a secure context; uploads work without microphone permission.
 
-Scoring depends on difficulty: a first-try answer earns 20, 40, or 60 XP, a first mistake costs 5, 10, or 15 XP once, a retry earns 5, 10, or 15 XP, and XP never falls below zero. Review intervals are deliberately transparent: a missed-then-correct phrase returns after five minutes; first-try successes advance through four hours, one day, three days, and seven days. Exercise selection is heuristic. Three consecutive first-try successes is shown as practice progress, not a claim of fluency.
+Scoring depends on difficulty: a first-try answer earns 40, 80, or 120 XP, a retry earns 15, 30, or 45 XP, mistakes cost nothing, and consecutive first-try answers add a small combo bonus. Career results pay modest XP so the Tagalog stays the main way to earn it. Review intervals are deliberately transparent: a missed-then-correct phrase returns after five minutes; first-try successes advance through four hours, one day, three days, and seven days. Exercise selection is heuristic. Three consecutive first-try successes is shown as practice progress, not a claim of fluency.
 
 ## Saved-career compatibility
 
-Careers replay from recorded answers, so the questions are versioned (`CAREER_RULES` in `lib/engine.ts`). A career started under the original questions keeps replaying `lib/player-career-v1.js`; the realism rules apply to careers started afterward. Attributes and overall rating display as unknown until the corresponding builder questions are resolved. Pending older recall exercises are upgraded to Tagalog cues while preserving their attempt count.
+Careers replay from recorded answers, so the questions are versioned (`CAREER_RULES` in `lib/engine.ts`). A career started under the original questions keeps replaying `lib/player-career-v1.js`, one started under the realistic rules keeps replaying `lib/player-career-v2.js`, and the fun rules in `lib/player-career.js` apply to careers started afterward. Lucky spins only reweight outcomes that could already land, so replays never depend on them. Attributes and overall rating display as unknown until the corresponding builder questions are resolved. Pending older recall exercises are upgraded to Tagalog cues while preserving their attempt count.
 
 ## Next development steps
 
-Validate phrase understanding and delayed recall with Chris, add richer lesson authoring and accessibility testing, and support recoverable guest-to-account migration before a public launch. No email, external notifications, payments, or AI model calls are involved in this version.
+Validate phrase understanding and delayed recall with Chris, add richer lesson authoring and accessibility testing, and support recoverable guest-to-account migration before a public launch. No email, external notifications, payments, or AI model calls are involved in this version. The only outside request is the Worker fetching BBC Sport's public Manchester United RSS feed, cached for 15 minutes.

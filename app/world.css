@@ -1,5 +1,10 @@
 /* The game world: animated pixel-art scenery and the screens played on top of it. */
 @font-face{font-family:"Pixelify Sans";src:url(/fonts/pixelify-sans.woff2) format("woff2");font-weight:400 700;font-display:swap}
+/* Pixelify's 5 is the same shape as its S, so numbers use the bundled Laro pixel digits instead. */
+@font-face{font-family:"Pixelify Sans";src:url(/fonts/laro-pixel.woff) format("woff");font-weight:400 700;font-display:swap;unicode-range:U+30-39}
+/* Pixelify fuses "fi" and "fl" into one glyph that reads like an "A" ("final", "midfielder"). The font shorthands
+   used across the app reset ligature settings, so this has to be !important to stay off. */
+*,*::before,*::after{font-variant-ligatures:no-common-ligatures!important;font-feature-settings:"liga" 0,"clig" 0!important}
 :root{--ink:#0a0e22;--deep:#060b1c;--plum:#2a1140;--gold:#ffc83d;--gold-deep:#9c5f00;--cream:#fff6df;--text:#f7f2e2;--muted:#d7dcf2;--line:#2a3268;--loss:#ff9e8f;--game:"Pixelify Sans",monospace}
 html,body{background:var(--deep)}
 .app-shell{background:var(--deep);color:var(--text)}
@@ -167,3 +172,167 @@ body:has(.play-mode) .install-app{display:none}
 .play-note{margin:8px auto 0;width:fit-content;max-width:100%;padding:5px 12px;background:var(--ink);color:#fff8e1;text-align:center;font:700 16px/1.25 var(--game);box-shadow:0 0 0 3px var(--gold)}
 .career-moments{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:6px}
 .career-moments li{padding:7px 12px;background:rgba(10,14,34,.92);border-left:4px solid var(--gold);font:700 15px/1.3 var(--game);color:#fff8e1}
+
+/* Readability: sentences use DM Sans at a comfortable size; pixel type stays for headings,
+   numbers and buttons. Nothing new gets a box. */
+:root{--read:"DM Sans",system-ui,sans-serif;--muted:#e3e7fb;--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");--grain-dark:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .12 0 0 0 0 .05 0 0 0 .16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.penalty-prompt{font:600 18px/1.35 var(--read)}
+.play-note{font:600 16px/1.4 var(--read)}
+.career-moments li{font:600 16px/1.4 var(--read)}
+.penalty-miss{font:700 17px/1.35 var(--read)}
+.penalty-actions .answer-options button{font-size:18px;line-height:1.3;min-height:56px}
+.word-review .review-translation{font:700 19px/1.4 var(--read)}
+.word-review .review-words button small{font-size:14px}
+.player-role{font:700 16px var(--read)}
+.app-shell .panel p,.app-shell .modal p,.app-shell .help-steps p,.app-shell .phrase-breakdown p{font-family:var(--read);font-size:16px;line-height:1.55}
+.app-shell .phrase-card p{color:var(--muted)}
+.app-shell .toast{font:600 15px/1.45 var(--read)}
+
+/* Texture: a fine film grain on panels and the night-blue chrome, a paper grain on buttons. */
+.app-shell .panel,.career-card,.app-shell .topbar,.app-shell .mobile-nav,.penalty-review,.play-controls .auto-toggle,.play-controls .speed-button,.wildcard-tile,.career-moments li,.play-note{background-image:var(--grain)}
+.game-cta,.app-shell .primary-button,.penalty-actions .answer-options button,.word-review .review-words button,.penalty-actions .word-tiles>button{background-image:var(--grain-dark)}
+.scene::after{content:"";position:absolute;inset:0;background:var(--grain);opacity:.55;mix-blend-mode:overlay}
+.united-feature-body{background:repeating-linear-gradient(45deg,#ffffff07 0 2px,transparent 2px 6px),var(--grain),linear-gradient(115deg,#a71930,#790d20)}
+
+/* Seasonal scenery: parol lanterns for the ber months, and Kuya watching on eviction night. */
+.scene-parol{position:absolute;top:calc(30*var(--px));width:calc(11*var(--px));height:calc(13*var(--px));transform-origin:50% 0;animation:parol-swing 2.4s steps(6) infinite alternate,parol-glow 1.6s steps(2) infinite}
+.scene-parol.one{left:calc(14*var(--px))}
+.scene-parol.two{left:calc(170*var(--px));top:calc(44*var(--px));animation-delay:-1.1s,-.5s}
+@keyframes parol-swing{from{transform:rotate(-7deg)}to{transform:rotate(7deg)}}
+@keyframes parol-glow{50%{filter:brightness(1.25) drop-shadow(0 0 calc(2*var(--px)) #ffc83d)}}
+.scene-keeper img{position:absolute;inset:0;width:100%;height:100%}
+.keeper-glasses{position:absolute;left:calc(45*var(--px));top:calc(14*var(--px));width:calc(20*var(--px));height:calc(5*var(--px))}
+.scene-volcano-glasses{position:absolute;left:calc(124*var(--px));top:calc(126*var(--px));width:calc(36*var(--px));height:calc(9*var(--px))}
+@media (prefers-reduced-motion:reduce){.scene-parol{animation:none}}
+
+/* Glasses toggle */
+.glasses-button svg{width:30px;height:auto;opacity:.85}
+.glasses-button.on svg{opacity:1;filter:drop-shadow(0 0 3px #8cc8ff)}
+.hud .glasses-button{margin-right:0}
+.app-shell .topbar .glasses-button{display:flex;align-items:center;justify-content:center;background:transparent;border:0;padding:0}
+.penalty-top{display:flex;justify-content:flex-end;gap:4px}
+.penalty-top .glasses-button{margin-right:0}
+.name-glasses{display:block;width:120px;height:auto;margin:-46px auto 18px}
+@media (max-width:400px){.app-shell .topbar{padding:0 10px}.app-shell .top-actions{gap:4px}.app-shell .xp-counter span{display:none}.app-shell .topbar .icon-button{min-width:40px}.app-shell .adventure-brand{font-size:22px}.app-shell .restart-button{padding:0 7px}}
+
+/* Hyung glasses mode: bigger text and a dimmer, calmer background. Everyone wears glasses. */
+.glasses-mode{--muted:#f3f5ff}
+.glasses-mode .scene::before{content:"";position:absolute;inset:0;z-index:1;background:rgba(6,11,28,.34)}
+.glasses-mode .play-note,.glasses-mode .career-moments li{font-size:18px}
+.glasses-mode .penalty-actions .answer-options button{font-size:21px;min-height:62px}
+.glasses-mode .penalty-prompt{font-size:20px}
+.glasses-mode .word-review .review-translation{font-size:22px}
+.glasses-mode .panel p,.glasses-mode .modal p,.glasses-mode .phrase-breakdown p,.glasses-mode .phrase-card p,.glasses-mode .toast{font-size:18px;line-height:1.6}
+.glasses-mode .wire-story h3{font-size:22px}
+.glasses-mode .wire-story p,.glasses-mode .story-tito{font-size:18px}
+.glasses-mode .map-label{font-size:16px}
+.glasses-mode .eyebrow{font-size:16px}
+
+/* Manchester United teaser: the biggest storyline as a newspaper clipping that opens The Wire. */
+.united-teaser{display:block;width:calc(100% - 44px);margin:4px 22px 30px;padding:16px 18px 20px;text-align:left;border:0;cursor:pointer;background:var(--grain-dark),#f3ead6;color:#1d1410;transform:rotate(-.8deg);box-shadow:6px 7px 0 #42091470;transition:transform .15s steps(2)}
+.united-teaser:hover,.united-teaser:focus-visible{transform:rotate(0)}
+.teaser-kicker{display:flex;align-items:center;gap:8px;font:700 12px/1.3 var(--read);letter-spacing:.08em;text-transform:uppercase;color:#5b4a3c}
+.teaser-kicker i{flex:none;width:10px;height:10px;box-shadow:0 0 0 2px #1d1410}
+.united-teaser b{display:block;margin:8px 0 12px;font:700 21px/1.25 Georgia,"Times New Roman",serif}
+.teaser-open{display:inline-flex;align-items:center;gap:6px;padding-top:8px;border-top:3px double #1d1410;font:800 14px var(--read);letter-spacing:.06em;text-transform:uppercase;color:#8f1427}
+
+/* The Wire: news as a transit map */
+.wire{max-width:860px;margin:0 auto}
+.wire-pulse{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:10px;margin:0 0 16px}
+.wire-pulse>div{padding:12px 14px;background:#10163a var(--grain);border:3px solid var(--line)}
+.wire-pulse b{display:block;font:700 30px/1 var(--game);color:var(--gold)}
+.wire-pulse span{display:block;margin-top:6px;font:700 11px/1.3 var(--read);letter-spacing:.08em;color:var(--muted)}
+.wire-mood b{font-size:22px;line-height:1.15}
+.wire-mood.bad b{color:#ff9e8f}.wire-mood.good b{color:#7ee0b0}
+.mood-gauge{position:relative;height:8px;margin-top:8px;background:linear-gradient(90deg,#ff6f61,#59607f 50%,#4fd1a0)}
+.mood-gauge i{position:absolute;top:-4px;width:6px;height:16px;margin-left:-3px;background:#fff8e1;box-shadow:0 0 0 2px var(--ink)}
+.wire-map{padding:14px 12px 10px}
+.map-head{display:flex;justify-content:space-between;align-items:baseline;margin:0 4px 6px}
+.map-hint{font:500 13px var(--read);color:var(--muted)}
+.map-row,.map-axis{display:grid;grid-template-columns:118px minmax(0,1fr);align-items:center}
+.map-row{min-height:46px}
+.map-label{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 6px;background:transparent;border:0;color:var(--muted);font:700 15px/1.15 var(--read);text-align:left;cursor:pointer;opacity:.75}
+.map-label i{flex:none;width:12px;height:12px;background:var(--line)}
+.map-label small{margin-left:auto;font:700 13px var(--game);color:var(--line)}
+.map-row.active .map-label{color:#fff8e1;opacity:1}
+.map-track{position:relative;height:44px}
+.map-track::after{content:"";position:absolute;left:94%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;background:var(--ink);box-shadow:0 0 0 3px var(--line);opacity:.6}
+.map-rail{position:absolute;right:6%;top:50%;height:4px;margin-top:-2px;background:var(--line);opacity:.35;transition:opacity .2s steps(2)}
+.map-row.active .map-rail{opacity:1;height:6px;margin-top:-3px}
+.map-stop{position:absolute;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;padding:0;background:transparent;border:0;cursor:pointer}
+.map-stop::before{content:"";position:absolute;left:8px;top:8px;width:14px;height:14px;box-sizing:border-box;background:var(--line);border:3px solid var(--ink);opacity:.55;transition:transform .12s steps(2)}
+.map-stop.bad::before{background:var(--ink);border-color:var(--line)}
+.map-row.active .map-stop::before{opacity:1}
+.map-stop:hover::before,.map-stop:focus-visible::before,.map-stop.focus::before{transform:scale(1.45);opacity:1;box-shadow:0 0 0 2px #fff8e1}
+.map-stop.new::after{content:"";position:absolute;left:4px;top:4px;width:22px;height:22px;box-sizing:border-box;border:2px solid var(--gold);animation:stop-ping 1.6s steps(4) infinite}
+@keyframes stop-ping{to{transform:scale(1.6);opacity:0}}
+@media (prefers-reduced-motion:reduce){.map-stop.new::after{animation:none}}
+.map-axis{margin-top:2px;border-top:2px dashed var(--line)}
+.map-axis>div{position:relative;height:24px}
+.map-axis>div span{position:absolute;top:5px;transform:translateX(-50%);font:600 12px var(--read);color:var(--muted)}
+.map-axis>div .now{color:var(--gold);font-weight:800}
+.wire-line h2{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:26px 0 12px;font:700 30px/1.05 var(--game);color:#fff8e1}
+.wire-line h2 i{width:16px;height:16px;background:var(--line)}
+.wire-line h2 small{flex-basis:100%;font:600 14px var(--read);color:var(--muted)}
+.wire-stories{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.wire-story{padding:16px 16px 14px;background:#10163a var(--grain);border:3px solid var(--line);border-left:6px solid var(--line);transition:border-color .2s steps(2)}
+.wire-story.focus{border-color:#fff8e1;border-left-color:var(--line)}
+.story-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font:700 12px var(--read);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.story-new{padding:1px 6px;background:var(--gold);color:var(--plum)}
+.story-tone{padding:1px 6px;border:2px solid currentColor}
+.story-tone.bad{color:#ff9e8f}.story-tone.good{color:#7ee0b0}.story-tone.neutral{color:var(--muted)}
+.wire-story>a{color:inherit;text-decoration:none}
+.wire-story h3{margin:8px 0 6px;font:700 19px/1.3 var(--read);color:#fff8e1}
+.wire-story>a:hover h3,.wire-story>a:focus-visible h3{text-decoration:underline}
+.wire-story p{margin:0;font:400 16px/1.55 var(--read);color:var(--muted)}
+.story-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;padding-top:10px;border-top:1px solid #2a326880}
+.story-tito{font:500 15px/1.35 var(--read);color:var(--muted)}
+.story-tito b{color:var(--gold)}
+.story-link{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:36px;font:700 14px var(--read);color:#fff8e1;text-decoration:none}
+.wire-credit{margin:18px 0 0;font:500 13px/1.5 var(--read);color:var(--muted)}
+@media (max-width:520px){.wire-pulse{grid-template-columns:1fr 1fr}.wire-mood{grid-column:1/-1}.map-row,.map-axis{grid-template-columns:92px minmax(0,1fr)}.map-label{font-size:13px;padding:0 2px;gap:6px}}
+@media (min-width:900px){.wire-stories{grid-template-columns:1fr 1fr}}
+
+/* Plot twists, lucky spins and combos */
+.twist-kicker{margin:0 auto 6px;width:fit-content;padding:3px 10px;background:#c43fb0;color:#fff8e1;font:700 15px/1.2 var(--read);letter-spacing:.16em;transform:rotate(-2deg);box-shadow:3px 3px 0 var(--plum)}
+.hud-luck{padding:3px 8px;background:#2f7a4f var(--grain);color:#e9ffe9;font:700 13px/1.2 var(--read);letter-spacing:.06em;box-shadow:0 0 0 2px var(--ink),0 0 10px #7ee0b0}
+.penalty-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px}
+.penalty-chips .penalty-chip{margin:0}
+.penalty-chip.luck{background:#2f7a4f;color:#e9ffe9}
+.penalty-chip.combo{background:var(--gold);color:var(--plum)}
+
+/* Trophy cabinet: a wooden case with glass shelves */
+.cabinet{padding:16px;background:var(--grain-dark),linear-gradient(180deg,#6b3d19,#4a2810);border:4px solid #2e1708;box-shadow:inset 0 0 0 3px #8a5523,6px 6px 0 #0006}
+.cabinet-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.cabinet-head h2{margin:0;font:700 24px/1 var(--game);color:#ffe7b0;text-shadow:2px 2px 0 #2e1708}
+.cabinet-tabs{display:flex;background:#2e1708;padding:3px;gap:3px}
+.cabinet-tabs button{min-height:36px;padding:0 12px;border:0;background:transparent;color:#e8cfa0;font:700 14px var(--read);cursor:pointer}
+.cabinet-tabs button.on{background:var(--gold);color:var(--plum)}
+.cabinet-total{margin:10px 0 12px;font:500 15px var(--read);color:#f3dfb8}
+.cabinet-total b{font:700 22px var(--game);color:var(--gold)}
+.cabinet-glass{position:relative;padding:4px 10px 0;background:linear-gradient(115deg,#ffffff10 0 18%,transparent 18% 30%,#ffffff08 30% 34%,transparent 34%),#170c05;border:3px solid #2e1708}
+.cabinet-shelf{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:12px 0 0;border-bottom:8px solid #8a5523;box-shadow:0 3px 0 #2e1708;margin-bottom:12px}
+.cabinet-shelf:last-child{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:6px}
+.cabinet-slot{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;min-height:84px;text-align:center}
+.cabinet-trophy{position:relative;display:flex;align-items:flex-end;justify-content:center;height:50px}
+.cabinet-slot:not(.won) .cabinet-trophy svg{filter:grayscale(1) brightness(.35)}
+.cabinet-slot.won .cabinet-trophy svg{filter:drop-shadow(0 0 6px #ffc83d99)}
+.cabinet-trophy b{position:absolute;right:-12px;top:-4px;padding:1px 5px;background:var(--gold);color:var(--plum);font:700 13px var(--game);box-shadow:0 0 0 2px #2e1708}
+.cabinet-slot span{font:700 11px/1.2 var(--read);letter-spacing:.04em;color:#d9c39a;padding-bottom:4px}
+.cabinet-slot.won span{color:#fff1c9}
+.glasses-mode .cabinet-slot span{font-size:13px}
+.app-shell .locker-header+.cabinet{margin:16px 0}
+
+/* Quiz level: five pips that fill as the career (and later careers) progress */
+.quiz-level{display:flex;align-items:center;justify-content:center;gap:8px;width:fit-content;margin:0 auto 8px;padding:3px 10px;background:rgba(10,14,34,.86);font:700 13px var(--read);letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.quiz-level span{display:flex;gap:3px}
+.quiz-level i{width:8px;height:8px;background:#3a3f63}
+.quiz-level i.on{background:var(--gold)}
+
+/* Restart: one big button, two quick countries, and a picker that starts as soon as you choose */
+.modal .restart-go{width:100%;justify-content:center;margin-top:6px}
+.restart-or{margin:14px 0 6px!important;text-align:center;font:600 14px var(--read)!important;color:var(--muted)}
+.restart-quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.app-shell .restart-quick button{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;min-height:48px;padding:0 8px;font:700 15px var(--read);white-space:nowrap}
+.modal .restart-label+.text-button{margin-top:14px}
+.restart-chip{display:flex;align-items:center;justify-content:center}
